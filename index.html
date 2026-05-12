@@ -311,7 +311,8 @@
               <div class="opt-label"><strong>빈 셀 처리</strong><span>빈 칸을 채우거나 행 삭제</span></div>
             </div>
             <div class="opt-sub" id="sub-empty">
-              <label><input type="radio" name="empty-mode" value="remove" checked> 빈 셀 있는 행 전체 삭제</label>
+              <label><input type="radio" name="empty-mode" value="clear" checked> 빈 문자열만 제거 <small style="color:var(--muted)">(셀을 진짜 빈칸으로 → 정렬 시 맨 뒤)</small></label>
+              <label><input type="radio" name="empty-mode" value="remove"> 빈 셀 포함 행 전체 삭제</label>
               <label><input type="radio" name="empty-mode" value="fill"> 특정 값으로 채우기</label>
               <input type="text" id="empty-fill-val" placeholder="채울 값 입력 (예: N/A, 0, -)" onclick="event.stopPropagation()"/>
             </div>
@@ -657,7 +658,17 @@
     if (document.getElementById('card-empty').classList.contains('active')) {
       const mode = document.querySelector('input[name="empty-mode"]:checked').value;
       const fill = document.getElementById('empty-fill-val').value;
-      if (mode === 'remove') {
+      if (mode === 'clear') {
+        // 빈 문자열('') → null로 변환 (다운로드 시 진짜 빈 셀이 됨)
+        let n = 0;
+        data.forEach(row => headers.forEach(h => {
+          if (row[h] === '' || (typeof row[h] === 'string' && row[h].trim() === '')) {
+            row[h] = null;
+            n++;
+          }
+        }));
+        logs.push('빈 문자열 ' + n + '개 셀 제거 (빈 칸으로 처리)');
+      } else if (mode === 'remove') {
         const b = data.length;
         data = data.filter(row => headers.every(h => row[h] !== '' && row[h] !== null && row[h] !== undefined));
         logs.push('빈 셀 포함 행 ' + (b - data.length) + '개 삭제');
@@ -763,7 +774,13 @@
 
   function downloadResult() {
     if (!window._resultData) return;
-    const ws = XLSX.utils.json_to_sheet(window._resultData, { header: headers });
+    // null → undefined 로 변환해야 xlsx에서 진짜 빈 셀로 출력됨
+    const exportData = window._resultData.map(row => {
+      const clean = {};
+      headers.forEach(h => { clean[h] = (row[h] === null || row[h] === undefined) ? undefined : row[h]; });
+      return clean;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Cleaned');
     XLSX.writeFile(wb, '정제결과_' + fileName);
