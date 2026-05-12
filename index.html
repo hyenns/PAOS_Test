@@ -325,6 +325,7 @@
               <div class="opt-label"><strong>텍스트 정리</strong><span>공백·특수문자·대소문자 정규화</span></div>
             </div>
             <div class="opt-sub" id="sub-text">
+              <label><input type="checkbox" id="txt-ghost" checked onclick="event.stopPropagation()"> 👻 유령 문자 제거 <small style="color:var(--muted)">(불가시 공백·제어문자)</small></label>
               <label><input type="checkbox" id="txt-trim" checked onclick="event.stopPropagation()"> 앞뒤 공백 제거</label>
               <label><input type="checkbox" id="txt-multi" onclick="event.stopPropagation()"> 연속 공백 → 한 칸으로</label>
               <label><input type="checkbox" id="txt-special" onclick="event.stopPropagation()"> 특수문자 제거 (!@#$ 등)</label>
@@ -645,13 +646,22 @@
     }
 
     if (document.getElementById('card-text').classList.contains('active')) {
+      const ghost = document.getElementById('txt-ghost').checked;
       const trim = document.getElementById('txt-trim').checked;
       const multi = document.getElementById('txt-multi').checked;
       const special = document.getElementById('txt-special').checked;
       const upper = document.getElementById('txt-upper').checked;
       const lower = document.getElementById('txt-lower').checked;
+      // 유령 문자 패턴: 제어문자(0-31), NBSP, zero-width 계열, BOM 등
+      const ghostPattern = /[\u0000-\u001F\u007F\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF\u2028\u2029]/g;
+      let ghostCount = 0;
       data.forEach(row => headers.forEach(h => {
         if (typeof row[h] === 'string') {
+          if (ghost) {
+            const before = row[h];
+            row[h] = row[h].replace(ghostPattern, '');
+            if (row[h] !== before) ghostCount++;
+          }
           if (trim) row[h] = row[h].trim();
           if (multi) row[h] = row[h].replace(/\s+/g, ' ');
           if (special) row[h] = row[h].replace(/[!@#$%^&*()\-_+=\[\]{};':"\\|,.<>\/?`~]/g, '');
@@ -659,7 +669,8 @@
           else if (lower) row[h] = row[h].toLowerCase();
         }
       }));
-      logs.push('텍스트 정리 완료');
+      const txtOps = [ghost&&('유령문자 '+ghostCount+'개 제거'), trim&&'공백 제거', multi&&'연속공백 정리', special&&'특수문자 제거', upper&&'대문자화', lower&&'소문자화'].filter(Boolean);
+      logs.push('텍스트 정리: ' + txtOps.join(', '));
     }
 
     if (document.getElementById('card-date').classList.contains('active')) {
