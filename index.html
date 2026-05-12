@@ -437,7 +437,7 @@
           <div class="table-scroll" id="previewTable"></div>
         </div>
 
-        <div style="margin-top:24px" id="step2-btns" style="display:none">
+        <div style="margin-top:24px;display:none" id="step2-btns">
           <div class="step-nav">
             <button class="back-btn" onclick="goToStep(1)">← 옵션 다시 선택</button>
             <button class="btn-accent" onclick="runCleaning()" id="btn-run">🚀 정제 실행</button>
@@ -576,25 +576,30 @@
     fileName = file.name;
     const reader = new FileReader();
     reader.onload = e => {
-      const wb = XLSX.read(e.target.result, { type: 'binary' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      headers = json[0] || [];
-      rawData = json.slice(1).map(row => { const obj = {}; headers.forEach((h, i) => obj[h] = row[i] ?? ''); return obj; });
-
-      // 업로드 존 상태 변경
-      uploadZone.style.borderColor = 'var(--accent)';
-      uploadZone.style.background = 'rgba(0,229,160,0.04)';
-      uploadZone.querySelector('h3').textContent = '✅ ' + file.name;
-      uploadZone.querySelector('p').textContent = rawData.length + '행 · ' + headers.length + '열 로드 완료';
-
-      populateCols();
-      showColSettings();
-      renderTable('previewTable', headers, rawData.slice(0, 10));
-      document.getElementById('previewBox').style.display = 'block';
-      document.getElementById('step2-btns').style.display = 'block';
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true, raw: false });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        if (!json || json.length < 2) { alert('데이터가 없거나 헤더만 있습니다.'); return; }
+        headers = (json[0] || []).map(h => String(h).trim());
+        rawData = json.slice(1)
+          .filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined))
+          .map(row => { const obj = {}; headers.forEach((h, i) => { obj[h] = (row[i] !== undefined && row[i] !== null) ? String(row[i]) : ''; }); return obj; });
+        if (rawData.length === 0) { alert('데이터 행이 없습니다.'); return; }
+        uploadZone.style.borderColor = 'var(--accent)';
+        uploadZone.style.background = 'rgba(0,229,160,0.04)';
+        uploadZone.querySelector('h3').textContent = '✅ ' + file.name;
+        uploadZone.querySelector('p').textContent = rawData.length + '행 · ' + headers.length + '열 로드 완료';
+        populateCols();
+        showColSettings();
+        renderTable('previewTable', headers, rawData.slice(0, 10));
+        document.getElementById('previewBox').style.display = 'block';
+        document.getElementById('step2-btns').style.display = 'block';
+      } catch(err) { alert('파일 읽기 오류: ' + err.message); console.error(err); }
     };
-    reader.readAsBinaryString(file);
+    reader.onerror = () => alert('파일 읽기 실패. 다시 시도해주세요.');
+    reader.readAsArrayBuffer(file);
   }
 
   function populateCols() {
