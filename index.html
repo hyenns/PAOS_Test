@@ -583,11 +583,34 @@
         const ws = wb.Sheets[wb.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
         if (!json || json.length < 2) { alert('데이터가 없거나 헤더만 있습니다.'); return; }
-        headers = (json[0] || []).map(h => String(h).trim());
+        // 헤더: 유령문자 + 앞뒤공백 제거, 빈 헤더는 "열N"으로 대체
+        const ghostPat = /[\u0000-\u001F\u007F\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF\u2028\u2029]/g;
+        headers = (json[0] || []).map((h, i) => {
+          const cleaned = String(h).replace(ghostPat, '').trim();
+          return cleaned || ('열' + (i + 1));
+        });
+
+        // 중복 헤더 처리 (같은 이름이면 _2, _3 붙임)
+        const seen = {};
+        headers = headers.map(h => {
+          if (seen[h] === undefined) { seen[h] = 0; return h; }
+          seen[h]++;
+          return h + '_' + (seen[h] + 1);
+        });
+
         rawData = json.slice(1)
           .filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined))
-          .map(row => { const obj = {}; headers.forEach((h, i) => { obj[h] = (row[i] !== undefined && row[i] !== null) ? String(row[i]) : ''; }); return obj; });
+          .map(row => {
+            const obj = {};
+            headers.forEach((h, i) => {
+              const val = row[i];
+              obj[h] = (val !== undefined && val !== null) ? String(val).replace(ghostPat, '') : '';
+            });
+            return obj;
+          });
+
         if (rawData.length === 0) { alert('데이터 행이 없습니다.'); return; }
+
         uploadZone.style.borderColor = 'var(--accent)';
         uploadZone.style.background = 'rgba(0,229,160,0.04)';
         uploadZone.querySelector('h3').textContent = '✅ ' + file.name;
