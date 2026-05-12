@@ -174,7 +174,7 @@
   <div class="sidebar-logo" onclick="showScreen('home')">
     <div class="logo-tag">Data Platform</div>
     <h1>Work<span>Lab</span>
-        <small class="logo sub">for PAOS</small>
+        <small class="logo-sub">for PAOS</small>
     </h1>
   </div>
   <div class="sidebar-section">
@@ -409,6 +409,37 @@
             <div style="font-size:0.72rem;color:var(--muted);margin-top:5px">Ctrl(또는 Cmd) 클릭으로 여러 열 선택</div>
           </div>
 
+          <div id="col-set-case" style="display:none;margin-bottom:20px">
+            <div style="font-size:0.82rem;font-weight:600;margin-bottom:10px">🔠 대소문자 변환 설정</div>
+
+            <div style="margin-bottom:12px">
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">변환 방식</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;margin-bottom:7px;cursor:pointer">
+                <input type="radio" name="case-mode" value="all" checked style="accent-color:var(--accent)">
+                모든 글자 변환 <small style="color:var(--muted)">예: apple → APPLE</small>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;margin-bottom:7px;cursor:pointer" id="case-first-label">
+                <input type="radio" name="case-mode" value="first" style="accent-color:var(--accent)">
+                첫 글자만 대문자 <small style="color:var(--muted)">예: apple → Apple</small>
+              </label>
+            </div>
+
+            <div>
+              <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px">적용 범위</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;margin-bottom:7px;cursor:pointer">
+                <input type="radio" name="case-target" value="all" checked style="accent-color:var(--accent)">
+                전체 열에 적용
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;margin-bottom:7px;cursor:pointer">
+                <input type="radio" name="case-target" value="selected" style="accent-color:var(--accent)">
+                특정 열만 적용
+              </label>
+
+              <select id="case-col-select" multiple size="4" style="display:none;width:100%;max-width:400px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font-family:inherit;font-size:0.8rem;"></select>
+              <div id="case-col-help" style="display:none;font-size:0.72rem;color:var(--muted);margin-top:5px">Ctrl(또는 Cmd) 클릭으로 여러 열 선택</div>
+            </div>
+          </div>
+
           <div id="col-set-filter" style="display:none;margin-bottom:20px">
             <div style="font-size:0.82rem;font-weight:600;margin-bottom:12px">🔍 필터링 조건 설정</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -580,6 +611,52 @@
     }
   }
 
+  // ─── CASE OPTION CONTROL ───
+  function updateCaseControls() {
+    const upper = document.getElementById('txt-upper').checked;
+    const lower = document.getElementById('txt-lower').checked;
+    const firstLabel = document.getElementById('case-first-label');
+    const firstRadio = document.querySelector('input[name="case-mode"][value="first"]');
+
+    // 소문자 변환은 첫 글자 옵션이 의미 없어서 비활성화
+    if (lower && !upper) {
+      if (firstLabel) firstLabel.style.opacity = '0.45';
+      if (firstRadio) {
+        firstRadio.disabled = true;
+        if (firstRadio.checked) {
+          document.querySelector('input[name="case-mode"][value="all"]').checked = true;
+        }
+      }
+    } else {
+      if (firstLabel) firstLabel.style.opacity = '1';
+      if (firstRadio) firstRadio.disabled = false;
+    }
+
+    if (rawData.length > 0) showColSettings();
+  }
+
+  document.getElementById('txt-upper').addEventListener('change', () => {
+    if (document.getElementById('txt-upper').checked) {
+      document.getElementById('txt-lower').checked = false;
+    }
+    updateCaseControls();
+  });
+
+  document.getElementById('txt-lower').addEventListener('change', () => {
+    if (document.getElementById('txt-lower').checked) {
+      document.getElementById('txt-upper').checked = false;
+    }
+    updateCaseControls();
+  });
+
+  document.querySelectorAll('input[name="case-target"]').forEach(r => {
+    r.addEventListener('change', () => {
+      const show = r.value === 'selected';
+      document.getElementById('case-col-select').style.display = show ? 'block' : 'none';
+      document.getElementById('case-col-help').style.display = show ? 'block' : 'none';
+    });
+  });
+
   // ─── FILE UPLOAD ───
   let rawData = [], headers = [], fileName = '';
   const uploadZone = document.getElementById('uploadZone');
@@ -648,7 +725,7 @@
   }
 
   function populateCols() {
-    ['dup-col-select', 'date-col-select', 'filter-col-select'].forEach(id => {
+    ['dup-col-select', 'date-col-select', 'filter-col-select', 'case-col-select'].forEach(id => {
       const sel = document.getElementById(id);
       sel.innerHTML = '';
       headers.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h; sel.appendChild(o); });
@@ -660,11 +737,14 @@
     const dupCol = document.querySelector('input[name="dup-mode"]:checked')?.value === 'col';
     const hasDate = document.getElementById('card-date').classList.contains('active');
     const hasFilter = document.getElementById('card-filter').classList.contains('active');
+    const hasText = document.getElementById('card-text').classList.contains('active');
+    const hasCase = hasText && (document.getElementById('txt-upper').checked || document.getElementById('txt-lower').checked);
 
-    const needColSettings = (hasDup && dupCol) || hasDate || hasFilter;
+    const needColSettings = (hasDup && dupCol) || hasDate || hasFilter || hasCase;
     document.getElementById('col-settings').style.display = needColSettings ? 'block' : 'none';
     document.getElementById('col-set-dup').style.display = (hasDup && dupCol) ? 'block' : 'none';
     document.getElementById('col-set-date').style.display = hasDate ? 'block' : 'none';
+    document.getElementById('col-set-case').style.display = hasCase ? 'block' : 'none';
     document.getElementById('col-set-filter').style.display = hasFilter ? 'block' : 'none';
   }
 
@@ -706,7 +786,11 @@
       const special = document.getElementById('txt-special').checked;
       const upper = document.getElementById('txt-upper').checked;
       const lower = document.getElementById('txt-lower').checked;
+      const caseMode = document.querySelector('input[name="case-mode"]:checked')?.value || 'all';
+      const caseTarget = document.querySelector('input[name="case-target"]:checked')?.value || 'all';
+      const selectedCaseCols = [...document.getElementById('case-col-select').selectedOptions].map(o => o.value);
       let ghostCount = 0;
+
       data.forEach(row => headers.forEach(h => {
         if (row[h] !== null && row[h] !== undefined) {
           row[h] = String(row[h]);
@@ -718,14 +802,34 @@
           if (trim) row[h] = row[h].trim();
           if (multi) row[h] = row[h].replace(/\s+/g, ' ');
           if (special) row[h] = row[h].replace(/[!@#$%^&*()\-_+=\[\]{};':"\\|,.<>\/?`~]/g, '');
-          if (upper) row[h] = row[h].toUpperCase();
-          else if (lower) row[h] = row[h].toLowerCase();
+          const shouldApplyCase = caseTarget === 'all' || selectedCaseCols.includes(h);
+
+          if (shouldApplyCase) {
+            if (upper) {
+              if (caseMode === 'first') {
+                row[h] = row[h].charAt(0).toUpperCase() + row[h].slice(1).toLowerCase();
+              } else {
+                row[h] = row[h].toUpperCase();
+              }
+            } else if (lower) {
+              row[h] = row[h].toLowerCase();
+            }
+          }
 
           // 정리 후 빈 값이 된 경우, 다운로드 시 진짜 빈 셀로 처리
           if (isBlankLike(row[h])) row[h] = null;
         }
       }));
-      const txtOps = [ghost&&('유령문자 '+ghostCount+'개 제거'), trim&&'공백 제거', multi&&'연속공백 정리', special&&'특수문자 제거', upper&&'대문자화', lower&&'소문자화'].filter(Boolean);
+      const caseTargetText = caseTarget === 'all' ? '전체 열' : (selectedCaseCols.join(', ') || '선택 열 없음');
+      const caseModeText = upper ? (caseMode === 'first' ? '첫 글자만 대문자' : '모든 글자 대문자') : '';
+      const txtOps = [
+        ghost&&('유령문자 '+ghostCount+'개 제거'),
+        trim&&'공백 제거',
+        multi&&'연속공백 정리',
+        special&&'특수문자 제거',
+        upper&&(caseModeText + ' (' + caseTargetText + ')'),
+        lower&&('소문자화 (' + caseTargetText + ')')
+      ].filter(Boolean);
       logs.push('텍스트 정리: ' + txtOps.join(', '));
     }
 
@@ -826,6 +930,10 @@
     document.getElementById('previewBox').style.display = 'none';
     document.getElementById('step2-btns').style.display = 'none';
     document.getElementById('col-settings').style.display = 'none';
+    document.getElementById('case-col-select').style.display = 'none';
+    document.getElementById('case-col-help').style.display = 'none';
+    document.querySelector('input[name="case-mode"][value="all"]').checked = true;
+    document.querySelector('input[name="case-target"][value="all"]').checked = true;
     document.getElementById('step1-warn').style.display = 'none';
     goToStep(1);
   }
