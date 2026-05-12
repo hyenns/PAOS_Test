@@ -353,6 +353,20 @@
             </div>
           </div>
 
+          <!-- 전화번호 정제 -->
+          <div class="opt-card" id="card-phone" onclick="toggleOpt('phone')">
+            <div class="opt-header">
+              <div class="opt-check" id="chk-phone">✓</div>
+              <div class="opt-icon">📞</div>
+              <div class="opt-label"><strong>전화번호 정제</strong><span>국가번호·지역번호·휴대폰 정리</span></div>
+            </div>
+            <div class="opt-sub" id="sub-phone">
+              <label><input type="checkbox" id="phone-format" checked onclick="event.stopPropagation()"> 전화번호 형식 통일 <small style="color:var(--muted)">(예: 010-0000-0000)</small></label>
+              <label><input type="checkbox" id="phone-split" checked onclick="event.stopPropagation()"> 휴대폰 / 지역번호 구분 컬럼 추가</label>
+              <span class="sub-label">전화번호 열 선택 (파일 업로드 후 표시)</span>
+            </div>
+          </div>
+
           <!-- 데이터 필터링 -->
           <div class="opt-card" id="card-filter" onclick="toggleOpt('filter')">
             <div class="opt-header">
@@ -406,6 +420,12 @@
             <div style="font-size:0.82rem;font-weight:600;margin-bottom:8px">📅 날짜 형식 통일 — 날짜 열 선택</div>
             <div id="date-col-checks" style="display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;max-width:420px;"></div>
             <div style="font-size:0.72rem;color:var(--muted);margin-top:5px">날짜로 변환할 열을 체크해주세요.</div>
+          </div>
+
+          <div id="col-set-phone" style="display:none;margin-bottom:20px">
+            <div style="font-size:0.82rem;font-weight:600;margin-bottom:8px">📞 전화번호 정제 — 전화번호 열 선택</div>
+            <div id="phone-col-checks" style="display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;max-width:420px;"></div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:5px">전화번호 형식을 정리할 열을 체크해주세요.</div>
           </div>
 
           <div id="col-set-filter" style="display:none;margin-bottom:20px">
@@ -682,6 +702,96 @@
     return y + '-' + m + '-' + d;
   }
 
+
+  // ─── PHONE CLEAN HELPER ───
+  // +82, 82, 010, 02, 031 등 휴대폰/지역번호를 정리
+  function normalizePhoneNumber(value) {
+    if (value === null || value === undefined || value === '') {
+      return { formatted: '', type: '', valid: false };
+    }
+
+    let original = cleanGhostText(value).trim();
+    if (!original) return { formatted: '', type: '', valid: false };
+
+    // 내선번호/부가 설명 제거: ext, 내선, # 뒤는 별도 저장하지 않고 기본 번호만 정제
+    let v = original
+      .replace(/\b(ext|extension)\b\.?\s*\d+.*$/i, '')
+      .replace(/내선\s*\d+.*$/g, '')
+      .replace(/[#].*$/g, '')
+      .trim();
+
+    // 국제전화 접두 제거: +82, 82, 0082, 82)
+    v = v.replace(/^\+\s*82\s*[-.)]?\s*/, '0');
+    v = v.replace(/^0082\s*[-.)]?\s*/, '0');
+    v = v.replace(/^82\s*[-.)]?\s*/, '0');
+
+    // 숫자만 추출
+    let digits = v.replace(/\D/g, '');
+
+    // +82 처리 후 010이 아니라 10으로 남는 케이스 보정
+    if (/^10\d{8}$/.test(digits)) digits = '0' + digits;
+
+    if (!digits) return { formatted: '', type: '', valid: false };
+
+    let formatted = digits;
+    let type = '기타';
+    let valid = true;
+
+    // 휴대폰: 010/011/016/017/018/019
+    if (/^01[016789]/.test(digits)) {
+      type = '휴대폰';
+      if (digits.length === 11) {
+        formatted = digits.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+      } else if (digits.length === 10) {
+        formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+      } else {
+        valid = false;
+      }
+    }
+    // 서울 지역번호 02
+    else if (/^02/.test(digits)) {
+      type = '지역번호';
+      if (digits.length === 9) {
+        formatted = digits.replace(/(02)(\d{3})(\d{4})/, '$1-$2-$3');
+      } else if (digits.length === 10) {
+        formatted = digits.replace(/(02)(\d{4})(\d{4})/, '$1-$2-$3');
+      } else {
+        valid = false;
+      }
+    }
+    // 대표번호/전국번호: 15xx, 16xx, 18xx
+    else if (/^1[568]\d{6}$/.test(digits)) {
+      type = '대표번호';
+      formatted = digits.replace(/(\d{4})(\d{4})/, '$1-$2');
+    }
+    // 050, 070 등 인터넷/안심번호
+    else if (/^0(50|70)\d+/.test(digits)) {
+      type = '특수번호';
+      if (digits.length === 11) {
+        formatted = digits.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+      } else if (digits.length === 10) {
+        formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+      } else {
+        valid = false;
+      }
+    }
+    // 일반 지역번호: 031, 032, 051 등
+    else if (/^0[3-6]\d/.test(digits)) {
+      type = '지역번호';
+      if (digits.length === 10) {
+        formatted = digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+      } else if (digits.length === 11) {
+        formatted = digits.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+      } else {
+        valid = false;
+      }
+    } else {
+      valid = false;
+    }
+
+    return { formatted, type, valid };
+  }
+
   // ─── NAVIGATION (hash 기반) ───
   const VALID_SCREENS = ['home', 'excel', 'merge'];
 
@@ -749,9 +859,9 @@
   function updateSelOptsPreview() {
     const labels = {
       dup: '🔁 중복 제거', empty: '🕳️ 빈 셀 처리',
-      text: '✏️ 텍스트 정리', date: '📅 날짜 형식 통일', filter: '🔍 데이터 필터링'
+      text: '✏️ 텍스트 정리', date: '📅 날짜 형식 통일', phone: '📞 전화번호 정제', filter: '🔍 데이터 필터링'
     };
-    const active = ['dup','empty','text','date','filter'].filter(k => document.getElementById('card-'+k).classList.contains('active'));
+    const active = ['dup','empty','text','date','phone','filter'].filter(k => document.getElementById('card-'+k).classList.contains('active'));
     document.getElementById('sel-opts-preview').innerHTML = active.map(k => `<div class="sopt-chip">${labels[k]}</div>`).join('');
   }
 
@@ -906,6 +1016,29 @@
         dupWrap.appendChild(label);
       });
     }
+
+    // 전화번호 열 체크박스 채우기
+    const phoneWrap = document.getElementById('phone-col-checks');
+    if (phoneWrap) {
+      phoneWrap.innerHTML = '';
+      headers.forEach(h => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--text);cursor:pointer;';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'phone-col-check';
+        input.value = h;
+        input.style.cssText = 'accent-color:var(--accent);width:14px;height:14px;';
+
+        const span = document.createElement('span');
+        span.textContent = h;
+
+        label.appendChild(input);
+        label.appendChild(span);
+        phoneWrap.appendChild(label);
+      });
+    }
   }
 
   let caseRules = [];
@@ -971,12 +1104,14 @@
     const dupCol = document.querySelector('input[name="dup-mode"]:checked')?.value === 'col';
     const hasDate = document.getElementById('card-date').classList.contains('active');
     const hasFilter = document.getElementById('card-filter').classList.contains('active');
+    const hasPhone = document.getElementById('card-phone').classList.contains('active');
     const hasCase = document.getElementById('card-text').classList.contains('active') && document.getElementById('txt-case')?.checked;
 
-    const needColSettings = (hasDup && dupCol) || hasDate || hasFilter || hasCase;
+    const needColSettings = (hasDup && dupCol) || hasDate || hasFilter || hasPhone || hasCase;
     document.getElementById('col-settings').style.display = needColSettings ? 'block' : 'none';
     document.getElementById('col-set-dup').style.display = (hasDup && dupCol) ? 'block' : 'none';
     document.getElementById('col-set-date').style.display = hasDate ? 'block' : 'none';
+    document.getElementById('col-set-phone').style.display = hasPhone ? 'block' : 'none';
     document.getElementById('col-set-filter').style.display = hasFilter ? 'block' : 'none';
     document.getElementById('col-set-case').style.display = hasCase ? 'block' : 'none';
 
@@ -1076,6 +1211,50 @@
         '날짜 ' + n + '개 → ' + fmt + ' 변환' +
         (fail ? ' / 변환 실패 ' + fail + '개' : '') +
         ' (열: ' + (cols.join(', ') || '없음') + ')'
+      );
+    }
+
+    if (document.getElementById('card-phone').classList.contains('active')) {
+      const cols = [...document.querySelectorAll('.phone-col-check:checked')].map(el => el.value);
+      const doFormat = document.getElementById('phone-format')?.checked;
+      const doSplit = document.getElementById('phone-split')?.checked;
+
+      if (cols.length === 0) {
+        alert('전화번호 정제할 열을 하나 이상 체크해주세요.');
+        return;
+      }
+
+      let n = 0;
+      let fail = 0;
+
+      cols.forEach(h => {
+        if (doSplit) {
+          const typeCol = h + '_유형';
+          if (!headers.includes(typeCol)) headers.push(typeCol);
+        }
+      });
+
+      data.forEach(row => {
+        cols.forEach(h => {
+          if (isBlankLike(row[h])) return;
+
+          const result = normalizePhoneNumber(row[h]);
+
+          if (result.valid && result.formatted) {
+            if (doFormat) row[h] = result.formatted;
+            if (doSplit) row[h + '_유형'] = result.type;
+            n++;
+          } else {
+            if (doSplit) row[h + '_유형'] = '확인필요';
+            fail++;
+          }
+        });
+      });
+
+      logs.push(
+        '전화번호 ' + n + '개 정제 완료' +
+        (fail ? ' / 확인 필요 ' + fail + '개' : '') +
+        ' (열: ' + cols.join(', ') + ')'
       );
     }
 
