@@ -470,6 +470,23 @@
 </main>
 
 <script>
+
+  // ─── TEXT CLEAN HELPER ───
+  // 엑셀에서 눈에 안 보이지만 정렬/필터에 잡히는 문자까지 제거
+  const GHOST_PATTERN = /[\u0000-\u001F\u007F-\u009F\u00A0\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u2000-\u200F\u2028\u2029\u202F\u205F\u2060-\u206F\u2800\u3000\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+
+  function cleanGhostText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .normalize('NFKC')
+      .replace(GHOST_PATTERN, '')
+      .replace(/\r?\n|\t/g, ' ');
+  }
+
+  function isBlankLike(value) {
+    return cleanGhostText(value).trim() === '';
+  }
+
   // ─── NAVIGATION (hash 기반) ───
   const VALID_SCREENS = ['home', 'excel'];
 
@@ -585,9 +602,8 @@
         const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
         if (!json || json.length < 2) { alert('데이터가 없거나 헤더만 있습니다.'); return; }
         // 헤더: 유령문자 + 앞뒤공백 제거, 빈 헤더는 "열N"으로 대체
-        const ghostPat = /[\u0000-\u001F\u007F\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF\u2028\u2029]/g;
         headers = (json[0] || []).map((h, i) => {
-          const cleaned = String(h).replace(ghostPat, '').trim();
+          const cleaned = cleanGhostText(h).trim();
           return cleaned || ('열' + (i + 1));
         });
 
@@ -600,12 +616,13 @@
         });
 
         rawData = json.slice(1)
-          .filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined))
+          // 유령문자만 들어있는 셀은 빈 셀로 판단
+          .filter(row => row.some(cell => !isBlankLike(cell)))
           .map(row => {
             const obj = {};
             headers.forEach((h, i) => {
               const val = row[i];
-              obj[h] = (val !== undefined && val !== null) ? String(val).replace(ghostPat, '') : '';
+              obj[h] = (val !== undefined && val !== null) ? cleanGhostText(val) : '';
             });
             return obj;
           });
@@ -662,7 +679,7 @@
         // 빈 문자열('') → null로 변환 (다운로드 시 진짜 빈 셀이 됨)
         let n = 0;
         data.forEach(row => headers.forEach(h => {
-          if (row[h] === '' || (typeof row[h] === 'string' && row[h].trim() === '')) {
+          if (isBlankLike(row[h])) {
             row[h] = null;
             n++;
           }
@@ -670,11 +687,11 @@
         logs.push('빈 문자열 ' + n + '개 셀 제거 (빈 칸으로 처리)');
       } else if (mode === 'remove') {
         const b = data.length;
-        data = data.filter(row => headers.every(h => row[h] !== '' && row[h] !== null && row[h] !== undefined));
+        data = data.filter(row => headers.every(h => !isBlankLike(row[h])));
         logs.push('빈 셀 포함 행 ' + (b - data.length) + '개 삭제');
       } else {
         let n = 0;
-        data.forEach(row => headers.forEach(h => { if (row[h] === '' || row[h] == null) { row[h] = fill || 'N/A'; n++; } }));
+        data.forEach(row => headers.forEach(h => { if (isBlankLike(row[h])) { row[h] = fill || 'N/A'; n++; } }));
         logs.push('빈 셀 ' + n + '개 → "' + (fill || 'N/A') + '"로 채움');
       }
     }
@@ -686,14 +703,13 @@
       const special = document.getElementById('txt-special').checked;
       const upper = document.getElementById('txt-upper').checked;
       const lower = document.getElementById('txt-lower').checked;
-      // 유령 문자 패턴: 제어문자(0-31), NBSP, zero-width 계열, BOM 등
-      const ghostPattern = /[\u0000-\u001F\u007F\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF\u2028\u2029]/g;
       let ghostCount = 0;
       data.forEach(row => headers.forEach(h => {
-        if (typeof row[h] === 'string') {
+        if (row[h] !== null && row[h] !== undefined) {
+          row[h] = String(row[h]);
           if (ghost) {
             const before = row[h];
-            row[h] = row[h].replace(ghostPattern, '');
+            row[h] = cleanGhostText(row[h]);
             if (row[h] !== before) ghostCount++;
           }
           if (trim) row[h] = row[h].trim();
@@ -701,6 +717,9 @@
           if (special) row[h] = row[h].replace(/[!@#$%^&*()\-_+=\[\]{};':"\\|,.<>\/?`~]/g, '');
           if (upper) row[h] = row[h].toUpperCase();
           else if (lower) row[h] = row[h].toLowerCase();
+
+          // 정리 후 빈 값이 된 경우, 다운로드 시 진짜 빈 셀로 처리
+          if (isBlankLike(row[h])) row[h] = null;
         }
       }));
       const txtOps = [ghost&&('유령문자 '+ghostCount+'개 제거'), trim&&'공백 제거', multi&&'연속공백 정리', special&&'특수문자 제거', upper&&'대문자화', lower&&'소문자화'].filter(Boolean);
@@ -728,7 +747,7 @@
       const val = document.getElementById('filter-val').value;
       const b = data.length;
       data = data.filter(row => {
-        const cell = String(row[col] ?? ''), num = parseFloat(cell);
+        const cell = cleanGhostText(row[col] ?? '').trim(), num = parseFloat(cell);
         if (op === 'contains') return cell.includes(val);
         if (op === 'not_contains') return !cell.includes(val);
         if (op === 'equals') return cell === val;
@@ -747,7 +766,12 @@
         ? [...document.getElementById('dup-col-select').selectedOptions].map(o => o.value)
         : headers;
       const seen = new Set(), b = data.length;
-      data = data.filter(row => { const k = cols.map(h => row[h]).join('||'); if (seen.has(k)) return false; seen.add(k); return true; });
+      data = data.filter(row => {
+        const k = cols.map(h => cleanGhostText(row[h] ?? '').trim()).join('||');
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
       logs.push('중복 ' + (b - data.length) + '행 제거 (기준: ' + (mode === 'all' ? '전체 열' : cols.join(', ')) + ')');
     }
 
