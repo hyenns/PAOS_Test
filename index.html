@@ -27,6 +27,7 @@
     .sidebar-logo .logo-tag { font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
     .sidebar-logo h1 { font-family: 'Gmarket Sans', sans-serif; font-size: 1.25rem; font-weight: 700; color: var(--text); line-height: 1.2; }
     .sidebar-logo h1 span { color: var(--accent); }
+    .logo-sub { font-size: 0.72rem; font-weight: 500; color: #ffffff; margin-left: 4px; vertical-align: middle; opacity: 0.9; }
     .sidebar-section { padding: 20px 16px 8px; }
     .sidebar-section-label { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 0 8px; margin-bottom: 6px; font-weight: 500; }
     .tool-block { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: all 0.18s; margin-bottom: 2px; border: 1px solid transparent; }
@@ -172,7 +173,9 @@
 <aside class="sidebar">
   <div class="sidebar-logo" onclick="showScreen('home')">
     <div class="logo-tag">Data Platform</div>
-    <h1>Work<span>Lab for PAOS</span></h1>
+    <h1>Work<span>Lab</span>
+        <small class="logo sub">for PAOS</small>
+    </h1>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">도구</div>
