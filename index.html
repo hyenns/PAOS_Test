@@ -435,11 +435,30 @@
           </div>
 
           <div id="col-set-case" style="display:none;margin-bottom:20px">
-            <div style="font-size:0.82rem;font-weight:600;margin-bottom:8px">🔠 대소문자 변환 — 열별 설정</div>
-            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:10px;line-height:1.6">
-              열마다 변경 안 함 / 모두 대문자 / 모두 소문자 / 첫 글자만 대문자를 선택할 수 있어요.
+            <div style="font-size:0.82rem;font-weight:600;margin-bottom:8px">🔠 대소문자 변환 — 열 선택</div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:12px;line-height:1.6">
+              필요한 열만 선택해서 대문자/소문자/첫 글자 대문자를 적용할 수 있어요.
             </div>
-            <div id="case-col-settings" style="display:grid;gap:8px;max-width:560px"></div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div>
+                <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">적용할 열</div>
+                <select id="case-col-select" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-family:inherit;font-size:0.8rem;min-width:180px;"></select>
+              </div>
+
+              <div>
+                <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">변환 방식</div>
+                <select id="case-mode-select" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 12px;font-family:inherit;font-size:0.8rem;min-width:180px;">
+                  <option value="upper">모두 대문자</option>
+                  <option value="lower">모두 소문자</option>
+                  <option value="first">첫 글자만 대문자</option>
+                </select>
+              </div>
+
+              <button class="btn-accent" type="button" onclick="addCaseRule()">+ 추가</button>
+            </div>
+
+            <div id="case-rule-list" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;max-width:560px"></div>
           </div>
         </div>
 
@@ -663,30 +682,72 @@
   }
 
   function populateCols() {
-    ['dup-col-select', 'date-col-select', 'filter-col-select'].forEach(id => {
+    ['dup-col-select', 'date-col-select', 'filter-col-select', 'case-col-select'].forEach(id => {
       const sel = document.getElementById(id);
       sel.innerHTML = '';
       headers.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h; sel.appendChild(o); });
     });
   }
 
-  function buildCaseColumnSettings() {
-    const wrap = document.getElementById('case-col-settings');
+  let caseRules = [];
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function escapeJs(str) {
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
+  function addCaseRule() {
+    const col = document.getElementById('case-col-select')?.value;
+    const mode = document.getElementById('case-mode-select')?.value;
+
+    if (!col || !mode) return;
+
+    const existing = caseRules.find(r => r.col === col);
+    if (existing) existing.mode = mode;
+    else caseRules.push({ col, mode });
+
+    renderCaseRules();
+  }
+
+  function removeCaseRule(col) {
+    caseRules = caseRules.filter(r => r.col !== col);
+    renderCaseRules();
+  }
+
+  function renderCaseRules() {
+    const wrap = document.getElementById('case-rule-list');
     if (!wrap) return;
 
-    wrap.innerHTML = headers.map((h, i) => `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
-        <div style="width:160px;font-size:0.78rem;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${h}">${h}</div>
-        <select id="case-mode-${i}" style="flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:7px 10px;font-family:inherit;font-size:0.78rem;">
-          <option value="none">변경 안 함</option>
-          <option value="upper">모두 대문자</option>
-          <option value="lower">모두 소문자</option>
-          <option value="first">첫 글자만 대문자</option>
-        </select>
+    const labelMap = {
+      upper: '모두 대문자',
+      lower: '모두 소문자',
+      first: '첫 글자만 대문자'
+    };
+
+    if (!caseRules.length) {
+      wrap.innerHTML = '<div style="font-size:0.75rem;color:var(--muted);padding:6px 2px">아직 추가된 변환 규칙이 없습니다.</div>';
+      return;
+    }
+
+    wrap.innerHTML = caseRules.map(r => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:0.8rem;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <strong>${escapeHtml(r.col)}</strong> → ${labelMap[r.mode] || r.mode}
+        </span>
+        <button type="button" onclick="removeCaseRule('${escapeJs(r.col)}')" style="background:transparent;border:none;color:var(--danger);cursor:pointer;font-size:0.8rem;flex-shrink:0">삭제</button>
       </div>
     `).join('');
   }
 
+  function showColSettings
   function showColSettings() {
     const hasDup = document.getElementById('card-dup').classList.contains('active');
     const dupCol = document.querySelector('input[name="dup-mode"]:checked')?.value === 'col';
@@ -701,7 +762,7 @@
     document.getElementById('col-set-filter').style.display = hasFilter ? 'block' : 'none';
     document.getElementById('col-set-case').style.display = hasCase ? 'block' : 'none';
 
-    if (hasCase) buildCaseColumnSettings();
+    if (hasCase) renderCaseRules();
   }
 
   // ─── RUN CLEANING ───
@@ -755,14 +816,13 @@
           if (special) row[h] = row[h].replace(/[!@#$%^&*()\-_+=\[\]{};':"\\|,.<>\/?`~]/g, '');
 
           if (useCase) {
-            const colIndex = headers.indexOf(h);
-            const mode = document.getElementById('case-mode-' + colIndex)?.value || 'none';
+            const rule = caseRules.find(r => r.col === h);
 
-            if (mode === 'upper') {
+            if (rule?.mode === 'upper') {
               row[h] = row[h].toUpperCase();
-            } else if (mode === 'lower') {
+            } else if (rule?.mode === 'lower') {
               row[h] = row[h].toLowerCase();
-            } else if (mode === 'first') {
+            } else if (rule?.mode === 'first') {
               row[h] = row[h]
                 .split(' ')
                 .map(word => word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word)
@@ -774,7 +834,7 @@
           if (isBlankLike(row[h])) row[h] = null;
         }
       }));
-      const txtOps = [ghost&&('유령문자 '+ghostCount+'개 제거'), trim&&'공백 제거', multi&&'연속공백 정리', special&&'특수문자 제거', useCase&&'대소문자 변환'].filter(Boolean);
+      const txtOps = [ghost&&('유령문자 '+ghostCount+'개 제거'), trim&&'공백 제거', multi&&'연속공백 정리', special&&'특수문자 제거', useCase&&('대소문자 변환 '+caseRules.length+'개 규칙 적용')].filter(Boolean);
       logs.push('텍스트 정리: ' + txtOps.join(', '));
     }
 
@@ -863,7 +923,7 @@
   }
 
   function resetExcel() {
-    rawData = []; headers = []; fileName = ''; window._resultData = null;
+    rawData = []; headers = []; fileName = ''; window._resultData = null; caseRules = [];
     fileInput.value = '';
     uploadZone.style.borderColor = '';
     uploadZone.style.background = '';
@@ -875,6 +935,8 @@
     document.getElementById('previewBox').style.display = 'none';
     document.getElementById('step2-btns').style.display = 'none';
     document.getElementById('col-settings').style.display = 'none';
+    const caseRuleList = document.getElementById('case-rule-list');
+    if (caseRuleList) caseRuleList.innerHTML = '';
     document.getElementById('step1-warn').style.display = 'none';
     goToStep(1);
   }
