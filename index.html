@@ -291,7 +291,7 @@
         <div class="opts-grid">
 
           <!-- 중복 제거 -->
-          <div class="opt-card" id="card-dup" onclick="toggleOpt('dup')">
+          <div class="opt-card" id="card-dup" onclick=\"toggleOpt('dup', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-dup">✓</div>
               <div class="opt-icon">🔁</div>
@@ -307,7 +307,7 @@
           </div>
 
           <!-- 빈 셀 처리 -->
-          <div class="opt-card" id="card-empty" onclick="toggleOpt('empty')">
+          <div class="opt-card" id="card-empty" onclick=\"toggleOpt('empty', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-empty">✓</div>
               <div class="opt-icon">🕳️</div>
@@ -322,7 +322,7 @@
           </div>
 
           <!-- 텍스트 정리 -->
-          <div class="opt-card" id="card-text" onclick="toggleOpt('text')">
+          <div class="opt-card" id="card-text" onclick=\"toggleOpt('text', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-text">✓</div>
               <div class="opt-icon">✏️</div>
@@ -338,7 +338,7 @@
           </div>
 
           <!-- 날짜 형식 통일 -->
-          <div class="opt-card" id="card-date" onclick="toggleOpt('date')">
+          <div class="opt-card" id="card-date" onclick=\"toggleOpt('date', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-date">✓</div>
               <div class="opt-icon">📅</div>
@@ -354,7 +354,7 @@
           </div>
 
           <!-- 전화번호 정제 -->
-          <div class="opt-card" id="card-phone" onclick="toggleOpt('phone')">
+          <div class="opt-card" id="card-phone" onclick=\"toggleOpt('phone', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-phone">✓</div>
               <div class="opt-icon">📞</div>
@@ -368,7 +368,7 @@
           </div>
 
           <!-- 데이터 필터링 -->
-          <div class="opt-card" id="card-filter" onclick="toggleOpt('filter')">
+          <div class="opt-card" id="card-filter" onclick=\"toggleOpt('filter', event)\">
             <div class="opt-header">
               <div class="opt-check" id="chk-filter">✓</div>
               <div class="opt-icon">🔍</div>
@@ -866,7 +866,9 @@
   }
 
   // ─── OPTION TOGGLE ───
-  function toggleOpt(key) {
+  function toggleOpt(key, event) {
+    // opt-sub 내부(라디오/체크박스/레이블 등) 클릭 시 카드 토글 방지
+    if (event && event.target.closest('.opt-sub')) return;
     const card = document.getElementById('card-' + key);
     const chk = document.getElementById('chk-' + key);
     const sub = document.getElementById('sub-' + key);
