@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PAOS_데이터 정제</title>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <link rel="stylesheet" href="./css/reset.css" />
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-logo" id="sidebar-logo">
+        <div class="logo-tag">Data Platform</div>
+        <h1>
+          Work<span>Lab</span>
+          <small class="logo-sub">for PAOS</small>
+        </h1>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">도구</div>
+        <div class="tool-block" id="nav-excel">
+          <div class="block-icon" style="background: rgba(0, 229, 160, 0.12)">🧹</div>
+          <div class="block-info">
+            <div class="block-name">엑셀 정제</div>
+            <div class="block-desc">중복·빈셀·날짜·필터</div>
+          </div>
+          <span class="block-badge badge-live">LIVE</span>
+        </div>
+        <div class="tool-block disabled">
+          <div class="block-icon" style="background: rgba(91, 110, 245, 0.12)">📊</div>
+          <div class="block-info">
+            <div class="block-name">차트 생성</div>
+            <div class="block-desc">데이터 시각화</div>
+          </div>
+          <span class="block-badge badge-soon">SOON</span>
+        </div>
+        <div class="tool-block" id="nav-merge">
+          <div class="block-icon" style="background: rgba(245, 197, 66, 0.12)">🔗</div>
+          <div class="block-info">
+            <div class="block-name">파일 병합</div>
+            <div class="block-desc">기준값으로 여러 파일 합치기</div>
+          </div>
+          <span class="block-badge badge-live">LIVE</span>
+        </div>
+        <div class="tool-block disabled">
+          <div class="block-icon" style="background: rgba(255, 90, 90, 0.12)">🔄</div>
+          <div class="block-info">
+            <div class="block-name">피벗 테이블</div>
+            <div class="block-desc">데이터 집계·요약</div>
+          </div>
+          <span class="block-badge badge-soon">SOON</span>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <p>WorkLab v0.1<br />테스트 플랫폼<br />Made by Hyein</p>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+      <!-- HOME -->
+      <div class="screen home-screen" id="screen-home">
+        <div class="greeting">👋 환영합니다</div>
+        <h2>데이터 작업,<br /><span>더 빠르게.</span></h2>
+        <p class="subtitle">사이드바에서 도구를 선택하거나, 아래 카드를 클릭해 시작하세요.</p>
+        <div class="tool-cards">
+          <div class="tool-card" style="--card-glow: rgba(0, 229, 160, 0.15)" id="home-card-excel">
+            <div class="card-icon" style="background: rgba(0, 229, 160, 0.12)">🧹</div>
+            <span class="card-badge badge-live">LIVE</span>
+            <h3>엑셀 정제</h3>
+            <p>중복 제거, 빈 셀 처리, 텍스트 정리, 날짜 통일, 필터링</p>
+          </div>
+          <div class="tool-card" style="--card-glow: rgba(245, 197, 66, 0.15)" id="home-card-merge">
+            <div class="card-icon" style="background: rgba(245, 197, 66, 0.12)">🔗</div>
+            <span class="card-badge badge-live">LIVE</span>
+            <h3>파일 병합</h3>
+            <p>동일한 기준 열을 선택해 여러 엑셀 파일 병합</p>
+          </div>
+          <div class="tool-card disabled" style="--card-glow: rgba(91, 110, 245, 0.15)">
+            <div class="card-icon" style="background: rgba(91, 110, 245, 0.12)">📊</div>
+            <span class="card-badge badge-soon">SOON</span>
+            <h3>차트 생성</h3>
+            <p>업로드한 데이터를 막대·선·파이 차트로 시각화</p>
+          </div>
+          <div class="tool-card disabled" style="--card-glow: rgba(255, 90, 90, 0.15)">
+            <div class="card-icon" style="background: rgba(255, 90, 90, 0.12)">🔄</div>
+            <span class="card-badge badge-soon">SOON</span>
+            <h3>피벗 테이블</h3>
+            <p>그룹별 집계·합계·평균 요약</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXCEL CLEANER -->
+      <div class="screen excel-screen" id="screen-excel">
+        <!-- Topbar -->
+        <div class="page-topbar">
+          <button class="back-btn" id="btn-back-excel">← 뒤로</button>
+          <div class="topbar-icon">🧹</div>
+          <div class="topbar-info">
+            <div class="breadcrumb">
+              <span class="bc-home" id="btn-home-excel">홈</span>
+              <span class="bc-sep">›</span>
+              <span class="bc-current">엑셀 정제</span>
+            </div>
+            <h2>엑셀 정제</h2>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-outline" id="btn-reset-excel">🔄 처음부터</button>
+          </div>
+        </div>
+
+        <div class="excel-body">
+          <!-- Step indicator -->
+          <div class="step-indicator">
+            <div class="step-item active" id="si-1">
+              <div class="step-dot">1</div>
+              <div class="step-label">정제 방법 선택</div>
+            </div>
+            <div class="step-line" id="sl-1"></div>
+            <div class="step-item" id="si-2">
+              <div class="step-dot">2</div>
+              <div class="step-label">파일 업로드</div>
+            </div>
+            <div class="step-line" id="sl-2"></div>
+            <div class="step-item" id="si-3">
+              <div class="step-dot">3</div>
+              <div class="step-label">결과 확인</div>
+            </div>
+          </div>
+
+          <!-- ── STEP 1: 옵션 선택 ── -->
+          <div class="step-panel active" id="step-1">
+            <div class="panel-title">Step 1</div>
+            <div class="panel-subtitle">어떻게 정제할까요?</div>
+            <div class="panel-desc">원하는 정제 방법을 모두 선택하세요. 여러 개를 동시에 적용할 수 있어요.</div>
+
+            <div class="opts-grid">
+              <!-- 중복 제거 -->
+              <div class="opt-card" id="card-dup">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-dup">✓</div>
+                  <div class="opt-icon">🔁</div>
+                  <div class="opt-label"><strong>중복 제거</strong><span>완전히 같은 행을 삭제</span></div>
+                </div>
+                <div class="opt-sub" id="sub-dup">
+                  <label><input type="radio" name="dup-mode" value="all" checked /> 전체 열 기준으로 제거</label>
+                  <label><input type="radio" name="dup-mode" value="col" /> 특정 열 기준으로 제거</label>
+                  <div id="sel-dup-col" style="display: none">
+                    <span class="sub-label">기준 열 선택 (파일 업로드 후 표시)</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 빈 셀 처리 -->
+              <div class="opt-card" id="card-empty">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-empty">✓</div>
+                  <div class="opt-icon">🕳️</div>
+                  <div class="opt-label"><strong>빈 셀 처리</strong><span>빈 칸을 채우거나 행 삭제</span></div>
+                </div>
+                <div class="opt-sub" id="sub-empty">
+                  <label><input type="radio" name="empty-mode" value="clear" checked /> 빈 문자열만 제거 <small style="color: var(--muted)">(셀을 진짜 빈칸으로 → 정렬 시 맨 뒤)</small></label>
+                  <label><input type="radio" name="empty-mode" value="remove" /> 빈 셀 포함 행 전체 삭제</label>
+                  <label><input type="radio" name="empty-mode" value="fill" /> 특정 값으로 채우기</label>
+                  <input type="text" id="empty-fill-val" placeholder="채울 값 입력 (예: N/A, 0, -)" onclick="event.stopPropagation()" />
+                </div>
+              </div>
+
+              <!-- 텍스트 정리 -->
+              <div class="opt-card" id="card-text">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-text">✓</div>
+                  <div class="opt-icon">✏️</div>
+                  <div class="opt-label"><strong>텍스트 정리</strong><span>공백·특수문자·대소문자 정규화</span></div>
+                </div>
+                <div class="opt-sub" id="sub-text">
+                  <label><input type="checkbox" id="txt-ghost" checked onclick="event.stopPropagation()" /> 👻 유령 문자 제거 <small style="color: var(--muted)">(불가시 공백·제어문자)</small></label>
+                  <label><input type="checkbox" id="txt-trim" checked onclick="event.stopPropagation()" /> 앞뒤 공백 제거</label>
+                  <label><input type="checkbox" id="txt-multi" onclick="event.stopPropagation()" /> 연속 공백 → 한 칸으로</label>
+                  <label><input type="checkbox" id="txt-special" onclick="event.stopPropagation()" /> 특수문자 제거 (!@#$ 등)</label>
+                  <label><input type="checkbox" id="txt-case" onclick="event.stopPropagation()" /> 대소문자 변환 <small style="color: var(--muted)">(파일 업로드 후 열별 설정)</small></label>
+                </div>
+              </div>
+
+              <!-- 날짜 형식 통일 -->
+              <div class="opt-card" id="card-date">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-date">✓</div>
+                  <div class="opt-icon">📅</div>
+                  <div class="opt-label"><strong>날짜 형식 통일</strong><span>지정한 형식으로 일괄 변환</span></div>
+                </div>
+                <div class="opt-sub" id="sub-date">
+                  <span class="sub-label">변환할 형식</span>
+                  <label><input type="radio" name="date-fmt" value="YYYY-MM-DD" checked onclick="event.stopPropagation()" /> YYYY-MM-DD &nbsp;<small style="color: var(--muted)">예) 2024-03-15</small></label>
+                  <label><input type="radio" name="date-fmt" value="YYYY/MM/DD" onclick="event.stopPropagation()" /> YYYY/MM/DD &nbsp;<small style="color: var(--muted)">예) 2024/03/15</small></label>
+                  <label><input type="radio" name="date-fmt" value="DD/MM/YYYY" onclick="event.stopPropagation()" /> DD/MM/YYYY &nbsp;<small style="color: var(--muted)">예) 15/03/2024</small></label>
+                  <span class="sub-label">날짜 열 선택 (파일 업로드 후 표시)</span>
+                </div>
+              </div>
+
+              <!-- 전화번호 정제 -->
+              <div class="opt-card" id="card-phone">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-phone">✓</div>
+                  <div class="opt-icon">📞</div>
+                  <div class="opt-label"><strong>전화번호 정제</strong><span>국가번호·지역번호·휴대폰 정리</span></div>
+                </div>
+                <div class="opt-sub" id="sub-phone">
+                  <label><input type="checkbox" id="phone-format" checked onclick="event.stopPropagation()" /> 전화번호 형식 통일 <small style="color: var(--muted)">(예: 010-0000-0000)</small></label>
+                  <label><input type="checkbox" id="phone-split" checked onclick="event.stopPropagation()" /> 휴대폰 / 지역번호 구분 컬럼 추가</label>
+                  <span class="sub-label">전화번호 열 선택 (파일 업로드 후 표시)</span>
+                </div>
+              </div>
+
+              <!-- 데이터 필터링 -->
+              <div class="opt-card" id="card-filter">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-filter">✓</div>
+                  <div class="opt-icon">🔍</div>
+                  <div class="opt-label"><strong>데이터 필터링</strong><span>조건에 맞는 행만 추출</span></div>
+                </div>
+                <div class="opt-sub" id="sub-filter">
+                  <span class="sub-label">필터 열 &amp; 조건 (파일 업로드 후 설정)</span>
+                  <div id="filter-preview-note" style="font-size: 0.75rem; color: var(--muted); margin-top: 6px; line-height: 1.6">파일 업로드 후 어떤 열을, 어떤 조건으로 필터링할지 설정할 수 있어요.</div>
+                </div>
+              </div>
+
+              <!-- 금액 단위 변환 -->
+              <div class="opt-card" id="card-amount">
+                <div class="opt-header">
+                  <div class="opt-check" id="chk-amount">✓</div>
+                  <div class="opt-icon">💰</div>
+                  <div class="opt-label"><strong>금액 단위 변환</strong><span>원·만원·백만원 단위 일괄 변환</span></div>
+                </div>
+                <div class="opt-sub" id="sub-amount">
+                  <span class="sub-label">현재 데이터 단위</span>
+                  <select id="amount-from-unit" onclick="event.stopPropagation()">
+                    <option value="1">원</option>
+                    <option value="1000">천원</option>
+                    <option value="10000">만원</option>
+                    <option value="1000000" selected>백만원</option>
+                    <option value="100000000">억원</option>
+                  </select>
+                  <span class="sub-label">변환할 단위</span>
+                  <select id="amount-to-unit" onclick="event.stopPropagation()">
+                    <option value="1" selected>원</option>
+                    <option value="1000">천원</option>
+                    <option value="10000">만원</option>
+                    <option value="1000000">백만원</option>
+                    <option value="100000000">억원</option>
+                  </select>
+                  <span class="sub-label">소수점 처리</span>
+                  <select id="amount-decimals" onclick="event.stopPropagation()">
+                    <option value="auto" selected>자동</option>
+                    <option value="0">0자리</option>
+                    <option value="1">1자리</option>
+                    <option value="2">2자리</option>
+                    <option value="3">3자리</option>
+                  </select>
+                  <span class="sub-label">금액 열 선택 (파일 업로드 후 표시)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="step-nav">
+              <button class="btn-accent" id="btn-to-step2">다음 — 파일 업로드 →</button>
+              <span id="step1-warn" style="font-size: 0.78rem; color: var(--danger); display: none">정제 옵션을 하나 이상 선택해주세요.</span>
+            </div>
+          </div>
+
+          <!-- ── STEP 2: 파일 업로드 ── -->
+          <div class="step-panel" id="step-2">
+            <div class="panel-title">Step 2</div>
+            <div class="panel-subtitle">정제할 파일을 올려주세요</div>
+
+            <!-- 선택된 옵션 요약 -->
+            <div class="selected-opts-preview" id="sel-opts-preview"></div>
+
+            <label class="upload-zone" for="fileInput" id="uploadZone">
+              <div class="up-icon">📂</div>
+              <h3>파일을 여기에 드래그하거나 클릭하여 업로드</h3>
+              <p>.xlsx · .xls · .csv 지원</p>
+              <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+            </label>
+
+            <!-- 파일 업로드 후 열 설정 (날짜/금액/전화번호/필터/중복열) -->
+            <div id="col-settings" class="col-settings-grid" style="display: none">
+              <div class="divider"></div>
+              <div class="panel-title">열 설정</div>
+
+              <div id="col-set-dup" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px">🔁 중복 제거 — 기준 열 선택</div>
+                <div id="dup-col-checks" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-width: 420px"></div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-top: 5px">체크한 열을 기준으로 중복 행을 판단합니다.</div>
+              </div>
+
+              <div id="col-set-date" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px">📅 날짜 형식 통일 — 날짜 열 선택</div>
+                <div id="date-col-checks" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-width: 420px"></div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-top: 5px">날짜로 변환할 열을 체크해주세요.</div>
+              </div>
+
+              <div id="col-set-amount" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px">💰 금액 단위 변환 — 금액 열 선택</div>
+                <div id="amount-col-checks" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-width: 420px"></div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-top: 5px; line-height: 1.6">예: 현재 단위가 백만원이고 변환 단위가 원이면 12 → 12,000,000으로 변환됩니다.</div>
+              </div>
+
+              <div id="col-set-phone" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px">📞 전화번호 정제 — 전화번호 열 선택</div>
+                <div id="phone-col-checks" style="display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-width: 420px"></div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-top: 5px">전화번호 형식을 정리할 열을 체크해주세요.</div>
+              </div>
+
+              <div id="col-set-filter" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 12px">🔍 필터링 조건 설정</div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end">
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">필터 열</div>
+                    <select id="filter-col-select" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 140px"></select>
+                  </div>
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">조건</div>
+                    <select id="filter-op" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem">
+                      <option value="contains">포함</option>
+                      <option value="not_contains">포함하지 않음</option>
+                      <option value="equals">일치</option>
+                      <option value="starts">~로 시작</option>
+                      <option value="ends">~로 끝남</option>
+                      <option value="gt">보다 큼 (&gt;)</option>
+                      <option value="lt">보다 작음 (&lt;)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">값</div>
+                    <input type="text" id="filter-val" placeholder="조건 값 입력" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 140px; outline: none" />
+                  </div>
+                </div>
+              </div>
+
+              <div id="col-set-case" style="display: none; margin-bottom: 20px">
+                <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px">🔠 대소문자 변환 — 열 선택</div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 12px; line-height: 1.6">필요한 열만 선택해서 대문자/소문자/첫 글자 대문자를 적용할 수 있어요.</div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end">
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">적용할 열</div>
+                    <select id="case-col-select" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 180px"></select>
+                  </div>
+
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">변환 방식</div>
+                    <select id="case-mode-select" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 180px">
+                      <option value="upper">모두 대문자</option>
+                      <option value="lower">모두 소문자</option>
+                      <option value="first">첫 글자만 대문자</option>
+                    </select>
+                  </div>
+
+                  <button class="btn-accent" type="button" id="btn-add-case-rule">+ 추가</button>
+                </div>
+
+                <div id="case-rule-list" style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px; max-width: 560px"></div>
+              </div>
+            </div>
+
+            <!-- 미리보기 -->
+            <div class="preview-box" id="previewBox">
+              <div class="panel-title">원본 미리보기 (상위 10행)</div>
+              <div class="table-scroll" id="previewTable"></div>
+            </div>
+
+            <div style="margin-top: 24px; display: none" id="step2-btns">
+              <div class="step-nav">
+                <button class="back-btn" id="btn-back-to-step1">← 옵션 다시 선택</button>
+                <button class="btn-accent" id="btn-run">🚀 정제 실행</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── STEP 3: 결과 ── -->
+          <div class="step-panel" id="step-3">
+            <div class="panel-title">Step 3</div>
+            <div class="panel-subtitle">정제 완료!</div>
+
+            <div class="stats-row" id="statsRow"></div>
+
+            <div class="action-row">
+              <button class="btn-accent-outline" id="btn-download-result">⬇️ 결과 다운로드 (.xlsx)</button>
+              <button class="back-btn" id="btn-back-to-step2">← 파일 다시 선택</button>
+              <button class="back-btn" id="btn-reset-excel2">🔄 처음부터</button>
+            </div>
+
+            <div class="result-view-toolbar" id="resultViewToolbar" style="display: none">
+              <div class="view-toggle-group">
+                <button class="view-toggle active" id="btn-view-result">전체 결과 보기</button>
+                <button class="view-toggle" id="btn-view-changed">변경 셀만 보기</button>
+                <button class="view-toggle" id="btn-view-compare">원본 ↔ 결과 비교</button>
+              </div>
+              <div class="diff-legend" id="diffLegend"></div>
+            </div>
+
+            <div class="table-scroll" id="resultTable"></div>
+            <div class="log-box"><ul id="logList"></ul></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILE MERGE -->
+      <div class="screen merge-screen" id="screen-merge">
+        <!-- Topbar -->
+        <div class="page-topbar">
+          <button class="back-btn" id="btn-back-merge">← 뒤로</button>
+          <div class="topbar-icon">🔗</div>
+          <div class="topbar-info">
+            <div class="breadcrumb">
+              <span class="bc-home" id="btn-home-merge">홈</span>
+              <span class="bc-sep">›</span>
+              <span class="bc-current">파일 병합</span>
+            </div>
+            <h2>파일 병합</h2>
+          </div>
+          <div class="topbar-right">
+            <button class="btn-outline" id="btn-reset-merge">🔄 처음부터</button>
+          </div>
+        </div>
+
+        <div class="excel-body">
+          <div class="panel-title">Merge Files</div>
+          <div class="panel-subtitle">여러 엑셀 파일을 기준값으로 병합합니다</div>
+          <div class="panel-desc">파일들을 업로드한 뒤, 모든 파일에 공통으로 있는 열을 병합 기준값으로 선택하세요. 기준값이 같은 행끼리 가로로 합쳐집니다.</div>
+
+          <label class="upload-zone" for="mergeFileInput" id="mergeUploadZone">
+            <div class="up-icon">📂</div>
+            <h3>병합할 파일들을 여기에 드래그하거나 클릭하여 업로드</h3>
+            <p>.xlsx · .xls · .csv 여러 개 선택 가능</p>
+            <input type="file" id="mergeFileInput" accept=".xlsx,.xls,.csv" multiple style="display: none" />
+          </label>
+
+          <div id="merge-settings" style="display: none">
+            <div class="divider"></div>
+            <div class="panel-title">병합 설정</div>
+
+            <div id="mergeFileList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-width: 720px"></div>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px">
+              <div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">병합 기준 열</div>
+                <select id="merge-key-select" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 220px"></select>
+              </div>
+
+              <div>
+                <div style="font-size: 0.72rem; color: var(--muted); margin-bottom: 4px">병합 방식</div>
+                <select id="merge-type-select" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.8rem; min-width: 180px">
+                  <option value="outer">전체 기준값 포함</option>
+                  <option value="inner">모든 파일에 있는 기준값만</option>
+                </select>
+              </div>
+
+              <button class="btn-accent" id="btn-run-merge">🔗 병합 실행</button>
+            </div>
+
+            <div style="font-size: 0.75rem; color: var(--muted); line-height: 1.7; margin-bottom: 18px">같은 이름의 열은 파일명 기준으로 자동 구분됩니다. 예: 매출액__파일1, 매출액__파일2</div>
+          </div>
+
+          <div id="merge-result-box" style="display: none">
+            <div class="divider"></div>
+            <div class="panel-subtitle">병합 완료!</div>
+            <div class="stats-row" id="mergeStatsRow"></div>
+            <div class="action-row">
+              <button class="btn-accent-outline" id="btn-download-merge">⬇️ 병합 결과 다운로드 (.xlsx)</button>
+              <button class="back-btn" id="btn-reset-merge2">🔄 처음부터</button>
+            </div>
+            <div class="table-scroll" id="mergeResultTable"></div>
+            <div class="log-box"><ul id="mergeLogList"></ul></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

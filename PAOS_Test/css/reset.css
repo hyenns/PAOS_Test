@@ -1,0 +1,368 @@
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 50px;
+}
+
+* {
+  -webkit-text-size-adjust: none;
+  box-sizing: border-box;
+  word-break: keep-all;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+body,
+div,
+dl,
+dt,
+dd,
+ul,
+ol,
+li,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+pre,
+code,
+form,
+fieldset,
+legend,
+input,
+textarea,
+p,
+blockquote,
+th,
+td,
+figure,
+figcaption,
+span {
+  margin: 0;
+  padding: 0;
+}
+body,
+html,
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+ul,
+ol,
+dl,
+dt,
+dd,
+p hr,
+button,
+input,
+form,
+fieldset,
+table,
+caption,
+th,
+td,
+header,
+nav,
+section,
+article,
+aside,
+footer,
+textarea {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+  font-size: 16px;
+  color: #212121;
+  background-color: #fff;
+}
+
+header,
+nav,
+section,
+article,
+aside,
+footer {
+  display: block;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+ol,
+ul {
+  list-style: none;
+}
+
+legend,
+caption {
+  text-indent: -100%;
+  text-indent: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+  text-shadow: none;
+  color: transparent;
+}
+img {
+  max-width: 100%;
+  border: 0;
+  vertical-align: top;
+}
+
+table {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+table,
+th,
+td {
+  border: none;
+  text-align: left;
+}
+
+th,
+label {
+  font-weight: normal;
+}
+
+address {
+  font-style: normal;
+}
+
+button,
+input {
+  border: none;
+  background: none;
+}
+
+i {
+  font-style: inherit;
+}
+
+button:focus,
+input:focus {
+  outline: none;
+}
+
+button,
+a,
+input,
+label {
+  cursor: pointer;
+  text-decoration: none;
+  outline: 0;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled,
+button:disabled {
+  cursor: no-drop;
+}
+
+input[type="checkbox"]:disabled + label,
+input[type="radio"]:disabled + label {
+  cursor: no-drop;
+}
+
+a {
+  text-decoration: none;
+  color: #333;
+}
+
+input::-ms-clear {
+  display: none;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="tel"],
+input[type="email"] {
+  cursor: text;
+}
+
+input::placeholder {
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+textarea {
+  resize: none;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+textarea:placeholder {
+  color: #6b6b6b;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+textarea:focus {
+  outline: none;
+}
+
+mark {
+  background: none;
+}
+
+/* select*/
+select {
+  border-radius: 0;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  outline: none;
+  appearance: none;
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+select::-ms-expand {
+  display: none;
+}
+
+option {
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+i,
+sub {
+  font-family: "Pretendard", "맑은 고딕", sans-serif;
+}
+
+/* input 체크박스 */
+input[type="checkbox"],
+input[type="radio"] {
+  display: none;
+}
+
+input[type="checkbox"]:checked + label::before {
+  background: url(../images/icon/checkbox_on.svg) center / 100% no-repeat;
+}
+
+input[type="radio"]:checked + label::before {
+  background: url(../images/icon/radio_on.svg) center / 100% no-repeat;
+}
+
+input[type="checkbox"] + label,
+input[type="radio"] + label {
+  position: relative;
+  font-size: 16px;
+  font-weight: 500;
+  color: #222;
+  display: flex;
+  align-items: center;
+}
+input[type="checkbox"] + label::before,
+input[type="radio"] + label::before {
+  content: "";
+  display: inline-block;
+  margin-right: 7.5px;
+  width: 20px;
+  height: 20px;
+}
+
+input[type="checkbox"] + label::before {
+  background: url(../images/icon/checkbox_off.svg) center / 100% no-repeat;
+}
+
+input[type="radio"] + label::before {
+  background: url(../images/icon/radio_off.svg) center / 100% no-repeat;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2") format("woff2");
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2") format("woff2");
+  font-weight: 200;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2") format("woff2");
+  font-weight: 900;
+  font-display: swap;
+}
