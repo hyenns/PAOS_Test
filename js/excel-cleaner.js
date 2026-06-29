@@ -902,6 +902,7 @@ export function resetExcel() {
   $(".opt-card").removeClass("active");
   $(".opt-check").css("color", "transparent");
   $(".opt-sub").removeClass("show");
+  $(".opt-sub input[type='checkbox'], .opt-sub input[type='radio']").prop("checked", false);
 
   $("#previewBox").hide();
   $("#step2-btns").hide();
