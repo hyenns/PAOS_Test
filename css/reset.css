@@ -180,13 +180,6 @@ label {
   font-family: "Pretendard", "맑은 고딕", sans-serif;
 }
 
-input[type="checkbox"],
-input[type="radio"] {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-}
-
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled,
 button:disabled {
@@ -265,7 +258,15 @@ sub {
 }
 
 /* input 체크박스 */
-input[type="checkbox"],
+
+/* input[type="checkbox"],
+input[type="radio"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+} */
+
+/* input[type="checkbox"],
 input[type="radio"] {
   display: none;
 }
@@ -302,7 +303,7 @@ input[type="checkbox"] + label::before {
 
 input[type="radio"] + label::before {
   background: url(../images/icon/radio_off.svg) center / 100% no-repeat;
-}
+} */
 
 @font-face {
   font-family: "Pretendard";
