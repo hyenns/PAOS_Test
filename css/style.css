@@ -207,12 +207,14 @@ body {
   margin-bottom: 48px;
 }
 .tool-cards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 260px));
-  gap: 18px;
-  max-width: 580px;
+  /* display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 260px)); */
+  gap: 15px;
+  display: flex;
+  flex-wrap: wrap;
 }
 .tool-card {
+  width: calc((100% - 45px) / 4);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -398,14 +400,14 @@ body {
 /* ─── STEP FLOW ─── */
 .excel-body {
   padding: 32px 36px;
-  max-width: 960px;
+  /* max-width: 960px; */
 }
 
 /* Step indicator */
 .step-indicator {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 5px;
   margin-bottom: 36px;
 }
 .step-item {
@@ -455,7 +457,6 @@ body {
   height: 1px;
   background: var(--border);
   margin: 0 4px;
-  flex-shrink: 0;
 }
 .step-line.done {
   background: var(--accent);
@@ -492,12 +493,13 @@ body {
 
 /* STEP 1 — 옵션 선택 */
 .opts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  gap: 15px;
   margin-bottom: 28px;
+  display: flex;
+  flex-wrap: wrap;
 }
 .opt-card {
+  width: calc((100% - 45px) / 4);
   background: var(--surface);
   border: 2px solid var(--border);
   border-radius: 14px;

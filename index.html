@@ -148,7 +148,7 @@
                   <div class="opt-label"><strong>중복 제거</strong><span>완전히 같은 행을 삭제</span></div>
                 </div>
                 <div class="opt-sub" id="sub-dup">
-                  <label><input type="radio" name="dup-mode" value="all" checked /> 전체 열 기준으로 제거</label>
+                  <label><input type="radio" name="dup-mode" value="all" /> 전체 열 기준으로 제거</label>
                   <label><input type="radio" name="dup-mode" value="col" /> 특정 열 기준으로 제거</label>
                   <div id="sel-dup-col" style="display: none">
                     <span class="sub-label">기준 열 선택 (파일 업로드 후 표시)</span>
@@ -164,7 +164,7 @@
                   <div class="opt-label"><strong>빈 셀 처리</strong><span>빈 칸을 채우거나 행 삭제</span></div>
                 </div>
                 <div class="opt-sub" id="sub-empty">
-                  <label><input type="radio" name="empty-mode" value="clear" checked /> 빈 문자열만 제거 <small style="color: var(--muted)">(셀을 진짜 빈칸으로 → 정렬 시 맨 뒤)</small></label>
+                  <label><input type="radio" name="empty-mode" value="clear" /> 빈 문자열만 제거 <small style="color: var(--muted)">(셀을 진짜 빈칸으로 → 정렬 시 맨 뒤)</small></label>
                   <label><input type="radio" name="empty-mode" value="remove" /> 빈 셀 포함 행 전체 삭제</label>
                   <label><input type="radio" name="empty-mode" value="fill" /> 특정 값으로 채우기</label>
                   <input type="text" id="empty-fill-val" placeholder="채울 값 입력 (예: N/A, 0, -)" onclick="event.stopPropagation()" />
@@ -179,8 +179,8 @@
                   <div class="opt-label"><strong>텍스트 정리</strong><span>공백·특수문자·대소문자 정규화</span></div>
                 </div>
                 <div class="opt-sub" id="sub-text">
-                  <label><input type="checkbox" id="txt-ghost" checked onclick="event.stopPropagation()" /> 👻 유령 문자 제거 <small style="color: var(--muted)">(불가시 공백·제어문자)</small></label>
-                  <label><input type="checkbox" id="txt-trim" checked onclick="event.stopPropagation()" /> 앞뒤 공백 제거</label>
+                  <label><input type="checkbox" id="txt-ghost" onclick="event.stopPropagation()" /> 👻 유령 문자 제거 <small style="color: var(--muted)">(불가시 공백·제어문자)</small></label>
+                  <label><input type="checkbox" id="txt-trim" onclick="event.stopPropagation()" /> 앞뒤 공백 제거</label>
                   <label><input type="checkbox" id="txt-multi" onclick="event.stopPropagation()" /> 연속 공백 → 한 칸으로</label>
                   <label><input type="checkbox" id="txt-special" onclick="event.stopPropagation()" /> 특수문자 제거 (!@#$ 등)</label>
                   <label><input type="checkbox" id="txt-case" onclick="event.stopPropagation()" /> 대소문자 변환 <small style="color: var(--muted)">(파일 업로드 후 열별 설정)</small></label>
@@ -196,7 +196,7 @@
                 </div>
                 <div class="opt-sub" id="sub-date">
                   <span class="sub-label">변환할 형식</span>
-                  <label><input type="radio" name="date-fmt" value="YYYY-MM-DD" checked onclick="event.stopPropagation()" /> YYYY-MM-DD &nbsp;<small style="color: var(--muted)">예) 2024-03-15</small></label>
+                  <label><input type="radio" name="date-fmt" value="YYYY-MM-DD" onclick="event.stopPropagation()" /> YYYY-MM-DD &nbsp;<small style="color: var(--muted)">예) 2024-03-15</small></label>
                   <label><input type="radio" name="date-fmt" value="YYYY/MM/DD" onclick="event.stopPropagation()" /> YYYY/MM/DD &nbsp;<small style="color: var(--muted)">예) 2024/03/15</small></label>
                   <label><input type="radio" name="date-fmt" value="DD/MM/YYYY" onclick="event.stopPropagation()" /> DD/MM/YYYY &nbsp;<small style="color: var(--muted)">예) 15/03/2024</small></label>
                   <span class="sub-label">날짜 열 선택 (파일 업로드 후 표시)</span>
@@ -211,8 +211,8 @@
                   <div class="opt-label"><strong>전화번호 정제</strong><span>국가번호·지역번호·휴대폰 정리</span></div>
                 </div>
                 <div class="opt-sub" id="sub-phone">
-                  <label><input type="checkbox" id="phone-format" checked onclick="event.stopPropagation()" /> 전화번호 형식 통일 <small style="color: var(--muted)">(예: 010-0000-0000)</small></label>
-                  <label><input type="checkbox" id="phone-split" checked onclick="event.stopPropagation()" /> 휴대폰 / 지역번호 구분 컬럼 추가</label>
+                  <label><input type="checkbox" id="phone-format" onclick="event.stopPropagation()" /> 전화번호 형식 통일 <small style="color: var(--muted)">(예: 010-0000-0000)</small></label>
+                  <label><input type="checkbox" id="phone-split" onclick="event.stopPropagation()" /> 휴대폰 / 지역번호 구분 컬럼 추가</label>
                   <span class="sub-label">전화번호 열 선택 (파일 업로드 후 표시)</span>
                 </div>
               </div>

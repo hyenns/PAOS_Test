@@ -902,7 +902,46 @@ export function resetExcel() {
   $(".opt-card").removeClass("active");
   $(".opt-check").css("color", "transparent");
   $(".opt-sub").removeClass("show");
-  $(".opt-sub input[type='checkbox'], .opt-sub input[type='radio']").prop("checked", false);
+
+  // ── Step 1 옵션(.opt-sub)의 라디오·체크박스·셀렉트를 index.html에 정의된
+  //    실제 기본값으로 명시 복원. (기존에는 .prop('checked', false)로 전부 꺼버려서
+  //    기본이 checked인 항목들까지 꺼지거나, 라디오 그룹이 아예 선택 해제된 채로
+  //    남는 문제가 있었음)
+  $('input[name="dup-mode"][value="all"]').prop("checked", true);
+  $('input[name="dup-mode"][value="col"]').prop("checked", false);
+  $("#sel-dup-col").hide();
+
+  $('input[name="empty-mode"][value="clear"]').prop("checked", true);
+  $('input[name="empty-mode"][value="remove"], input[name="empty-mode"][value="fill"]').prop("checked", false);
+  $("#empty-fill-val").val("");
+
+  $("#txt-ghost").prop("checked", true);
+  $("#txt-trim").prop("checked", true);
+  $("#txt-multi").prop("checked", false);
+  $("#txt-special").prop("checked", false);
+  $("#txt-case").prop("checked", false);
+
+  $('input[name="date-fmt"][value="YYYY-MM-DD"]').prop("checked", true);
+  $('input[name="date-fmt"][value="YYYY/MM/DD"], input[name="date-fmt"][value="DD/MM/YYYY"]').prop("checked", false);
+
+  $("#phone-format").prop("checked", true);
+  $("#phone-split").prop("checked", true);
+
+  $("#filter-col-select").empty();
+  $("#filter-op").val("contains");
+  $("#filter-val").val("");
+
+  $("#amount-from-unit").val("1000000");
+  $("#amount-to-unit").val("1");
+  $("#amount-decimals").val("auto");
+
+  $("#case-col-select").empty();
+  $("#case-mode-select").val("upper");
+
+  // ── 열 설정(#col-settings) 패널: 파일 업로드 후 동적으로 채워지는 열 체크박스 목록을
+  //    완전히 비워서, 새 파일을 올리기 전까지 이전 파일의 열 선택이 화면에 남지 않도록 함
+  $("#dup-col-checks, #date-col-checks, #amount-col-checks, #phone-col-checks").empty();
+  $("#col-set-dup, #col-set-date, #col-set-amount, #col-set-phone, #col-set-filter, #col-set-case").hide();
 
   $("#previewBox").hide();
   $("#step2-btns").hide();
@@ -910,6 +949,7 @@ export function resetExcel() {
   $("#resultViewToolbar").hide();
   $("#resultTable").empty();
   $("#case-rule-list").empty();
+  $("#sel-opts-preview").empty();
   $("#step1-warn").hide();
 
   goToStep(1);
