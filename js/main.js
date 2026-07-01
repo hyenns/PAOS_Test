@@ -14,13 +14,19 @@ $(function () {
   $('#sidebar-logo').on('click', () => showScreen('home'));
   $('#nav-excel').on('click',    () => showScreen('excel'));
   $('#nav-merge').on('click',    () => showScreen('merge'));
+  $('#nav-crawling').on('click', () => showScreen('crawling'));
 
   // 홈 카드
   $('#home-card-excel').on('click', () => showScreen('excel'));
   $('#home-card-merge').on('click', () => showScreen('merge'));
+  $('#home-card-crawling').on('click', () => showScreen('crawling'));
 
   // ── 공통 뒤로 가기 ────────────────────────────────────────────────────────
   $('.back-btn[data-back]').on('click', goBack);
+
+  // ── 크롤링 ───────────────────────────────────────────────────────────────
+  $('#btn-back-crawling').on('click', goBack);
+  $('#btn-home-crawling').on('click', () => showScreen('home'));
 
   // ── 엑셀 정제 ─────────────────────────────────────────────────────────────
   // Topbar

@@ -38,6 +38,14 @@
           </div>
           <span class="block-badge badge-live">LIVE</span>
         </div>
+        <div class="tool-block" id="nav-crawling">
+          <div class="block-icon" style="background: rgba(0, 180, 255, 0.12)">🕷️</div>
+          <div class="block-info">
+            <div class="block-name">크롤링</div>
+            <div class="block-desc">사이트별 수집·정제 자동화</div>
+          </div>
+          <span class="block-badge badge-soon">SOON</span>
+        </div>
         <div class="tool-block disabled">
           <div class="block-icon" style="background: rgba(91, 110, 245, 0.12)">📊</div>
           <div class="block-info">
@@ -79,6 +87,12 @@
             <span class="card-badge badge-live">LIVE</span>
             <h3>파일 병합</h3>
             <p>동일한 기준 열을 선택해 여러 엑셀 파일 병합</p>
+          </div>
+          <div class="tool-card" style="--card-glow: rgba(0, 180, 255, 0.15)" id="home-card-crawling">
+            <div class="card-icon" style="background: rgba(0, 180, 255, 0.12)">🕷️</div>
+            <span class="card-badge badge-soon">SOON</span>
+            <h3>크롤링</h3>
+            <p>NICE, DART, 사람인, KSIA 등 사이트별 수집·정제 자동화</p>
           </div>
           <div class="tool-card disabled" style="--card-glow: rgba(91, 110, 245, 0.15)">
             <div class="card-icon" style="background: rgba(91, 110, 245, 0.12)">📊</div>
@@ -429,6 +443,55 @@
 
             <div class="table-scroll" id="resultTable"></div>
             <div class="log-box"><ul id="logList"></ul></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CRAWLING -->
+      <div class="screen crawling-screen" id="screen-crawling">
+        <div class="page-topbar">
+          <button class="back-btn" id="btn-back-crawling">← 뒤로</button>
+          <div class="topbar-icon">🕷️</div>
+          <div class="topbar-info">
+            <div class="breadcrumb">
+              <span class="bc-home" id="btn-home-crawling">홈</span>
+              <span class="bc-sep">›</span>
+              <span class="bc-current">크롤링</span>
+            </div>
+            <h2>크롤링</h2>
+          </div>
+        </div>
+
+        <div class="home-screen">
+          <div class="greeting">Crawling Automation</div>
+          <h2>사이트별 수집·정제,<br /><span>한 곳에서 관리.</span></h2>
+          <p class="subtitle">NICE BizInfo, DART, 사람인, KSIA 등 자주 쓰는 크롤링 자동화 기능을 이 메뉴에 연결할 예정입니다.</p>
+
+          <div class="tool-cards">
+            <div class="tool-card disabled" style="--card-glow: rgba(0, 229, 160, 0.15)">
+              <div class="card-icon" style="background: rgba(0, 229, 160, 0.12)">🏢</div>
+              <span class="card-badge badge-soon">SOON</span>
+              <h3>NICE BizInfo</h3>
+              <p>기업명·사업자번호 기준 기업 개요 정보 수집</p>
+            </div>
+            <div class="tool-card disabled" style="--card-glow: rgba(91, 110, 245, 0.15)">
+              <div class="card-icon" style="background: rgba(91, 110, 245, 0.12)">📑</div>
+              <span class="card-badge badge-soon">SOON</span>
+              <h3>DART</h3>
+              <p>기업개황, 공시, 임원현황 등 API·웹 수집</p>
+            </div>
+            <div class="tool-card disabled" style="--card-glow: rgba(245, 197, 66, 0.15)">
+              <div class="card-icon" style="background: rgba(245, 197, 66, 0.12)">👥</div>
+              <span class="card-badge badge-soon">SOON</span>
+              <h3>사람인</h3>
+              <p>채용 키워드 기반 기업 리스트·상세정보 수집</p>
+            </div>
+            <div class="tool-card disabled" style="--card-glow: rgba(255, 90, 90, 0.15)">
+              <div class="card-icon" style="background: rgba(255, 90, 90, 0.12)">⚙️</div>
+              <span class="card-badge badge-soon">SOON</span>
+              <h3>KSIA</h3>
+              <p>회원사 탭별 기업 정보 모달 수집</p>
+            </div>
           </div>
         </div>
       </div>

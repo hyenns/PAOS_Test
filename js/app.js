@@ -1,7 +1,7 @@
 // ─── app.js ───
 // 네비게이션(hash 기반 화면 전환) + 전역 이벤트 바인딩
 
-const VALID_SCREENS = ['home', 'excel', 'merge'];
+const VALID_SCREENS = ['home', 'excel', 'merge', 'crawling'];
 
 function renderScreen(name) {
   $('.screen').removeClass('active');
