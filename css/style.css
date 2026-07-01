@@ -1021,6 +1021,7 @@ tr:hover td {
 #dup-col-checks,
 #date-col-checks,
 #amount-col-checks,
+#address-col-checks,
 #phone-col-checks {
   width: 100%;
   max-width: 420px !important;
@@ -1028,12 +1029,14 @@ tr:hover td {
 #dup-col-checks label,
 #date-col-checks label,
 #amount-col-checks label,
+#address-col-checks label,
 #phone-col-checks label {
   min-width: 0;
 }
 #dup-col-checks label span,
 #date-col-checks label span,
 #amount-col-checks label span,
+#address-col-checks label span,
 #phone-col-checks label span {
   min-width: 0;
   overflow: hidden;
@@ -1043,6 +1046,7 @@ tr:hover td {
 @media (max-width: 900px) {
   #col-set-date,
   #col-set-amount,
+  #col-set-address,
   #col-set-phone {
     float: none;
     clear: both;
@@ -1069,6 +1073,7 @@ tr:hover td {
 }
 #col-settings.col-settings-grid #col-set-date,
 #col-settings.col-settings-grid #col-set-amount,
+#col-settings.col-settings-grid #col-set-address,
 #col-settings.col-settings-grid #col-set-phone {
   float: none !important;
   clear: none !important;
@@ -1083,8 +1088,11 @@ tr:hover td {
 #col-settings.col-settings-grid #col-set-amount {
   grid-column: 2;
 }
-#col-settings.col-settings-grid #col-set-phone {
+#col-settings.col-settings-grid #col-set-address {
   grid-column: 1;
+}
+#col-settings.col-settings-grid #col-set-phone {
+  grid-column: 2;
 }
 #col-settings.col-settings-grid #col-set-dup,
 #col-settings.col-settings-grid #col-set-filter,
@@ -1097,6 +1105,7 @@ tr:hover td {
 }
 #col-settings.col-settings-grid #date-col-checks,
 #col-settings.col-settings-grid #amount-col-checks,
+#col-settings.col-settings-grid #address-col-checks,
 #col-settings.col-settings-grid #phone-col-checks,
 #col-settings.col-settings-grid #dup-col-checks {
   width: 100% !important;
@@ -1111,6 +1120,7 @@ tr:hover td {
   #col-settings.col-settings-grid > .panel-title,
   #col-settings.col-settings-grid #col-set-date,
   #col-settings.col-settings-grid #col-set-amount,
+  #col-settings.col-settings-grid #col-set-address,
   #col-settings.col-settings-grid #col-set-phone,
   #col-settings.col-settings-grid #col-set-dup,
   #col-settings.col-settings-grid #col-set-filter,
@@ -1139,6 +1149,7 @@ tr:hover td {
 #col-settings.col-settings-grid #col-set-dup,
 #col-settings.col-settings-grid #col-set-date,
 #col-settings.col-settings-grid #col-set-amount,
+#col-settings.col-settings-grid #col-set-address,
 #col-settings.col-settings-grid #col-set-phone {
   grid-column: auto !important;
   float: none !important;
@@ -1160,6 +1171,7 @@ tr:hover td {
 #col-settings.col-settings-grid #dup-col-checks,
 #col-settings.col-settings-grid #date-col-checks,
 #col-settings.col-settings-grid #amount-col-checks,
+#col-settings.col-settings-grid #address-col-checks,
 #col-settings.col-settings-grid #phone-col-checks {
   width: 100% !important;
   max-width: none !important;
@@ -1187,6 +1199,7 @@ tr:hover td {
   #col-settings.col-settings-grid #col-set-dup,
   #col-settings.col-settings-grid #col-set-date,
   #col-settings.col-settings-grid #col-set-amount,
+  #col-settings.col-settings-grid #col-set-address,
   #col-settings.col-settings-grid #col-set-phone,
   #col-settings.col-settings-grid #col-set-filter,
   #col-settings.col-settings-grid #col-set-case {

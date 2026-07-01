@@ -1,7 +1,7 @@
 // ─── excel-cleaner.js ───
 // 엑셀 정제 기능 전체 (Step 1~3, 파일 업로드, 정제 실행, 결과 미리보기, 다운로드, 초기화)
 
-import { cleanGhostText, isBlankLike, parseFlexibleDate, formatDateValue, parseFlexibleNumber, convertAmountUnit, AMOUNT_UNIT_LABELS, normalizePhoneNumber, escapeHtml, escapeJs, renderTable } from "./utils.js";
+import { cleanGhostText, isBlankLike, parseFlexibleDate, formatDateValue, parseFlexibleNumber, convertAmountUnit, AMOUNT_UNIT_LABELS, normalizePhoneNumber, normalizeKoreanAddress, escapeHtml, escapeJs, renderTable } from "./utils.js";
 
 // ── 상태 ─────────────────────────────────────────────────────────────────────
 let rawData = [];
@@ -92,10 +92,11 @@ function updateSelOptsPreview() {
     text: "✏️ 텍스트 정리",
     date: "📅 날짜 형식 통일",
     amount: "💰 금액 단위 변환",
+    address: "🏠 주소 변환",
     phone: "📞 전화번호 정제",
     filter: "🔍 데이터 필터링",
   };
-  const active = ["dup", "empty", "text", "date", "amount", "phone", "filter"].filter((k) => $(`#card-${k}`).hasClass("active"));
+  const active = ["dup", "empty", "text", "date", "amount", "address", "phone", "filter"].filter((k) => $(`#card-${k}`).hasClass("active"));
   $("#sel-opts-preview").html(active.map((k) => `<div class="sopt-chip">${labels[k]}</div>`).join(""));
 }
 
@@ -125,10 +126,19 @@ async function loadFile(file) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false });
 
+      // ExcelJS는 원본 엑셀 서식을 미리보기/결과 파일에 최대한 반영하기 위한 보조 로더입니다.
+      // 일부 xlsx 파일은 SheetJS로는 정상 로드되지만 ExcelJS에서 내부 구조(sheets 등)를 못 읽어
+      // 업로드 전체가 실패하는 경우가 있어, ExcelJS 실패는 경고만 남기고 SheetJS 데이터 기준으로 진행합니다.
       if (/\.xlsx$/i.test(file.name) && window.ExcelJS) {
-        originalExcelJsWorkbook = new ExcelJS.Workbook();
-        await originalExcelJsWorkbook.xlsx.load(originalFileArrayBuffer.slice(0));
-        originalExcelJsWorksheet = originalExcelJsWorkbook.worksheets[0] || null;
+        try {
+          originalExcelJsWorkbook = new ExcelJS.Workbook();
+          await originalExcelJsWorkbook.xlsx.load(originalFileArrayBuffer.slice(0));
+          originalExcelJsWorksheet = originalExcelJsWorkbook.worksheets[0] || null;
+        } catch (excelJsErr) {
+          console.warn("ExcelJS 서식 로드 실패. 데이터 정제는 SheetJS 기준으로 계속 진행합니다.", excelJsErr);
+          originalExcelJsWorkbook = null;
+          originalExcelJsWorksheet = null;
+        }
       }
 
       if (!json || json.length < 2) {
@@ -214,6 +224,7 @@ function populateCols() {
 
   buildChecks("date-col-checks", "date-col-check", null);
   buildChecks("amount-col-checks", "amount-col-check", (h) => /금액|매출|매출액|비용|단가|가격|원|amount|sales|revenue|price|cost/i.test(h));
+  buildChecks("address-col-checks", "address-col-check", (h) => /주소|소재지|위치|지역|address|addr|location/i.test(h));
   buildChecks("dup-col-checks", "dup-col-check", null);
   buildChecks("phone-col-checks", "phone-col-check", null);
 }
@@ -224,15 +235,17 @@ function showColSettings() {
   const dupCol = $('input[name="dup-mode"]:checked').val() === "col";
   const hasDate = $("#card-date").hasClass("active");
   const hasAmount = $("#card-amount").hasClass("active");
+  const hasAddress = $("#card-address").hasClass("active");
   const hasFilter = $("#card-filter").hasClass("active");
   const hasPhone = $("#card-phone").hasClass("active");
   const hasCase = $("#card-text").hasClass("active") && $("#txt-case").is(":checked");
 
-  const needCols = (hasDup && dupCol) || hasDate || hasAmount || hasFilter || hasPhone || hasCase;
+  const needCols = (hasDup && dupCol) || hasDate || hasAmount || hasAddress || hasFilter || hasPhone || hasCase;
   $("#col-settings").css("display", needCols ? "grid" : "none");
   $("#col-set-dup").toggle(hasDup && dupCol);
   $("#col-set-date").toggle(hasDate);
   $("#col-set-amount").toggle(hasAmount);
+  $("#col-set-address").toggle(hasAddress);
   $("#col-set-phone").toggle(hasPhone);
   $("#col-set-filter").toggle(hasFilter);
   $("#col-set-case").toggle(hasCase);
@@ -424,6 +437,34 @@ export function runCleaning() {
       }),
     );
     logs.push(`금액 ${n}개 단위 변환: ${AMOUNT_UNIT_LABELS[fromUnit] || fromUnit} → ${AMOUNT_UNIT_LABELS[toUnit] || toUnit}${fail ? ` / 변환 실패 ${fail}개` : ""} (열: ${cols.join(", ")})`);
+  }
+
+  // 주소 변환
+  if ($("#card-address").hasClass("active")) {
+    const cols = $(".address-col-check:checked")
+      .map((_, el) => el.value)
+      .get();
+
+    if (!cols.length) {
+      alert("주소 변환할 열을 하나 이상 체크해주세요.");
+      return;
+    }
+
+    let n = 0,
+      unchanged = 0;
+    data.forEach((row) =>
+      cols.forEach((h) => {
+        if (isBlankLike(row[h])) return;
+        const result = normalizeKoreanAddress(row[h]);
+        if (result.changed) {
+          row[h] = result.value;
+          n++;
+        } else {
+          unchanged++;
+        }
+      }),
+    );
+    logs.push(`주소 ${n}개 표준 약칭 변환 완료${unchanged ? ` / 변경 없음 ${unchanged}개` : ""} (열: ${cols.join(", ")})`);
   }
 
   // 전화번호 정제
@@ -940,8 +981,8 @@ export function resetExcel() {
 
   // ── 열 설정(#col-settings) 패널: 파일 업로드 후 동적으로 채워지는 열 체크박스 목록을
   //    완전히 비워서, 새 파일을 올리기 전까지 이전 파일의 열 선택이 화면에 남지 않도록 함
-  $("#dup-col-checks, #date-col-checks, #amount-col-checks, #phone-col-checks").empty();
-  $("#col-set-dup, #col-set-date, #col-set-amount, #col-set-phone, #col-set-filter, #col-set-case").hide();
+  $("#dup-col-checks, #date-col-checks, #amount-col-checks, #address-col-checks, #phone-col-checks").empty();
+  $("#col-set-dup, #col-set-date, #col-set-amount, #col-set-address, #col-set-phone, #col-set-filter, #col-set-case").hide();
 
   $("#previewBox").hide();
   $("#step2-btns").hide();
@@ -1105,6 +1146,7 @@ function inferCleanType(detail) {
     after = formatDiffValue(detail.after);
   if (col.endsWith("_유형")) return "전화번호 유형 추가";
   if (/금액|매출|매출액|비용|단가|가격|원|amount|sales|revenue|price|cost/i.test(col)) return "금액 단위 변환";
+  if (/주소|소재지|위치|지역|address|addr|location/i.test(col)) return "주소 변환";
   if (/전화|phone|mobile|tel/i.test(col)) return "전화번호 정제";
   if (/일자|날짜|date|가입일|등록일|설립일/i.test(col)) return "날짜 형식 통일";
   if (before === "(빈칸)" && after !== "(빈칸)") return "빈 셀 채우기";

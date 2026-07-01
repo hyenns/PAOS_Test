@@ -36,6 +36,7 @@ $(function () {
   $('#card-phone').on('click',  () => toggleOpt('phone'));
   $('#card-filter').on('click', () => toggleOpt('filter'));
   $('#card-amount').on('click', () => toggleOpt('amount'));
+  $('#card-address').on('click', () => toggleOpt('address'));
 
   // Step 네비게이션
   $('#btn-to-step2').on('click', () => goToStep(2));

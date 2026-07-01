@@ -116,6 +116,55 @@ export function convertAmountUnit(value, fromUnit, toUnit, decimalsMode) {
   return { ok: true, value: converted };
 }
 
+
+// ── Korean Address ──────────────────────────────────────────────────────────
+const KOREAN_ADDRESS_PREFIX_MAP = [
+  ['서울특별시', '서울'], ['서울시', '서울'],
+  ['부산광역시', '부산'],
+  ['대구광역시', '대구'],
+  ['인천광역시', '인천'],
+  ['광주광역시', '광주'],
+  ['대전광역시', '대전'],
+  ['울산광역시', '울산'],
+  ['세종특별자치시', '세종'], ['세종시', '세종'],
+  ['경기도', '경기'],
+  ['강원특별자치도', '강원'], ['강원도', '강원'],
+  ['충청북도', '충북'], ['충청남도', '충남'],
+  ['전북특별자치도', '전북'], ['전라북도', '전북'],
+  ['전라남도', '전남'],
+  ['경상북도', '경북'], ['경상남도', '경남'],
+  ['제주특별자치도', '제주'], ['제주도', '제주'],
+];
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function normalizeKoreanAddress(value) {
+  if (value === null || value === undefined || value === '') {
+    return { ok: false, changed: false, value };
+  }
+
+  const original = cleanGhostText(value).replace(/\s+/g, ' ').trim();
+  if (!original) return { ok: false, changed: false, value: original };
+
+  for (const [fullName, shortName] of KOREAN_ADDRESS_PREFIX_MAP) {
+    const re = new RegExp(`^${escapeRegExp(fullName)}\\s*`);
+    if (!re.test(original)) continue;
+
+    const rest = original.replace(re, '').replace(/\s+/g, ' ').trim();
+    const normalized = rest ? `${shortName} ${rest}` : shortName;
+    return {
+      ok: true,
+      changed: normalized !== original,
+      value: normalized,
+      matched: fullName,
+    };
+  }
+
+  return { ok: true, changed: false, value: original };
+}
+
 // ── Phone ────────────────────────────────────────────────────────────────────
 export function normalizePhoneNumber(value) {
   if (!value && value !== 0) return { formatted: '', type: '', valid: false };
