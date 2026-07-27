@@ -5,11 +5,15 @@ import time
 from typing import Iterable, Iterator, Any
 from urllib.parse import quote
 
+from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from webdriver_manager.chrome import ChromeDriverManager
 
-from backend.iros_crawler import get_driver, make_event
+from backend.iros_crawler import make_event
 
 SARAMIN_URL = "https://www.saramin.co.kr/zf_user/"
 
@@ -150,8 +154,60 @@ def make_finance_url(corp_url: str) -> str:
     return corp_url.replace("/zf_user/company-info/view?", "/zf_user/company-info/view-inner-finance?")
 
 
-def safe_get(driver, url: str, *, timeout: int = 18) -> tuple[bool, str]:
-    """사람인 페이지 로딩이 오래 걸릴 때 전체 크롤링이 멈추지 않도록 이동합니다."""
+def create_saramin_driver(*, hidden: bool = True) -> webdriver.Chrome:
+    """
+    hidden=True이면 Chrome 창이 아예 뜨지 않는 headless 모드로 실행합니다.
+    사람인에서 headless가 불안정할 수 있어 디버깅이 필요하면 hidden=False로 실행합니다.
+    """
+    options = Options()
+    options.page_load_strategy = "none"  # driver.get이 페이지 전체 로딩을 기다리지 않도록 함
+
+    if hidden:
+        # Chrome 창이 실제로 뜨지 않는 완전 숨김 모드입니다.
+        options.add_argument("--headless=new")
+        options.add_argument("--window-size=1365,900")
+    else:
+        options.add_argument("--start-maximized")
+
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--remote-allow-origins=*")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+    options.add_experimental_option("useAutomationExtension", False)
+    options.add_experimental_option("prefs", {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.default_content_setting_values.notifications": 2,
+    })
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    try:
+        driver.set_page_load_timeout(8)
+        driver.set_script_timeout(8)
+    except Exception:
+        pass
+    return driver
+
+
+def stop_loading(driver) -> None:
+    try:
+        driver.execute_script("window.stop();")
+    except Exception:
+        try:
+            driver.execute_cdp_cmd("Page.stopLoading", {})
+        except Exception:
+            pass
+
+
+def safe_get(driver, url: str, *, timeout: int = 8) -> tuple[bool, str]:
+    """사람인 페이지 전체 로딩을 기다리지 않고 빠르게 이동합니다."""
     try:
         try:
             driver.set_page_load_timeout(timeout)
@@ -159,21 +215,54 @@ def safe_get(driver, url: str, *, timeout: int = 18) -> tuple[bool, str]:
             pass
 
         driver.get(url)
+        # page_load_strategy=none이라 보통 즉시 반환됩니다.
+        time.sleep(0.3)
         return True, ""
 
     except TimeoutException:
-        # 문서 로딩은 오래 걸려도 body가 뜬 경우가 많으므로 로딩만 중단하고 계속 수집합니다.
-        try:
-            driver.execute_script("window.stop();")
-        except Exception:
-            pass
-        return True, "페이지 로딩 시간이 길어 강제로 중단 후 현재 화면 기준으로 수집합니다."
+        stop_loading(driver)
+        return True, "페이지 로딩 시간이 길어 로딩을 중단하고 현재 화면 기준으로 수집합니다."
 
     except WebDriverException as exc:
+        stop_loading(driver)
         return False, str(exc)
 
     except Exception as exc:
+        stop_loading(driver)
         return False, str(exc)
+
+
+def wait_for_search_result_area(driver, *, timeout: int = 8) -> bool:
+    """검색 결과 링크 또는 검색결과 없음 영역이 나타날 때까지만 짧게 기다립니다."""
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        try:
+            if driver.find_elements(By.CSS_SELECTOR, "a[href*='/zf_user/company-info/view?csn=']"):
+                return True
+            if driver.find_elements(By.CSS_SELECTOR, "div.info_no_result, div.no_result"):
+                return True
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            if "검색결과가 없습니다" in body_text or "검색어를 다시 확인" in body_text or "기업정보" in body_text:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    stop_loading(driver)
+    return False
+
+
+def wait_for_detail_area(driver, *, timeout: int = 8) -> bool:
+    """상세 페이지에서 body 또는 기업정보 영역이 잡힐 때까지만 짧게 기다립니다."""
+    end_time = time.time() + timeout
+    while time.time() < end_time:
+        try:
+            if driver.find_elements(By.CSS_SELECTOR, "div.company_details_group, body"):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    stop_loading(driver)
+    return False
 
 
 def get_finance_from_page(driver) -> dict[str, str]:
@@ -291,19 +380,13 @@ def run_saramin_crawler_events(
         else:
             yield log(f"검색어별 상위 최대 {max_results_per_keyword}개 기업의 기업소개만 빠르게 수집합니다.")
 
-        driver = get_driver(headless=headless, page_load_strategy="eager")
-        try:
-            driver.set_page_load_timeout(18)
-            driver.set_script_timeout(18)
-        except Exception:
-            pass
+        driver = create_saramin_driver(hidden=headless)
 
         if headless:
-            yield log("사람인 접속을 백그라운드로 진행합니다.")
         else:
             yield log("Chrome 창 표시 모드로 실행합니다. 화면에서 사람인 페이지 진행 상황을 확인할 수 있습니다.")
 
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 8)
 
         for idx, keyword in enumerate(company_inputs):
             current_no = idx + 1
@@ -313,7 +396,7 @@ def run_saramin_crawler_events(
                 yield log(f"🔎 [{current_no}/{total}] {keyword} 검색 중...")
 
                 search_url = f"https://www.saramin.co.kr/zf_user/search/company?searchword={quote(keyword)}"
-                ok, nav_message = safe_get(driver, search_url, timeout=18)
+                ok, nav_message = safe_get(driver, search_url, timeout=8)
                 if nav_message:
                     yield log(f"  ↳ {nav_message}")
                 if not ok:
@@ -321,14 +404,13 @@ def run_saramin_crawler_events(
                     yield make_event("progress", current=current_no, total=total, result_count=len(results))
                     continue
 
-                try:
-                    wait.until(lambda d: "기업정보" in d.find_element(By.TAG_NAME, "body").text)
-                except TimeoutException:
-                    yield log(f"⏭️ [{current_no}/{total}] {keyword} — 검색 페이지 로딩 실패")
+                if not wait_for_search_result_area(driver, timeout=8):
+                    yield log(f"⏭️ [{current_no}/{total}] {keyword} — 검색 결과 영역 로딩 지연으로 건너뜀")
                     yield make_event("progress", current=current_no, total=total, result_count=len(results))
                     continue
 
-                time.sleep(1)
+                stop_loading(driver)
+                time.sleep(0.3)
 
                 no_result_boxes = driver.find_elements(By.CSS_SELECTOR, "div.info_no_result, div.no_result")
                 no_result_text = "\n".join([box.text for box in no_result_boxes]).strip()
@@ -369,14 +451,15 @@ def run_saramin_crawler_events(
                     try:
                         yield log(f"  ↳ {corp['corp_name']} 상세정보 수집 중...")
 
-                        ok, nav_message = safe_get(driver, corp["corp_url"], timeout=18)
+                        ok, nav_message = safe_get(driver, corp["corp_url"], timeout=8)
                         if nav_message:
                             yield log(f"    · 상세페이지 {nav_message}")
                         if not ok:
                             yield log(f"  ↳ {corp.get('corp_name', '기업명 없음')} — 상세페이지 접속 실패: {nav_message[:80]}")
                             continue
-                        wait.until(lambda d: d.find_elements(By.TAG_NAME, "body"))
-                        time.sleep(0.5)
+                        wait_for_detail_area(driver, timeout=8)
+                        stop_loading(driver)
+                        time.sleep(0.3)
                         detail = get_detail_from_page(driver)
 
                         row = {
@@ -399,12 +482,13 @@ def run_saramin_crawler_events(
                             finance_url = make_finance_url(corp["corp_url"])
                             finance: dict[str, str] = {}
                             try:
-                                ok, nav_message = safe_get(driver, finance_url, timeout=18)
+                                ok, nav_message = safe_get(driver, finance_url, timeout=8)
                                 if nav_message:
                                     yield log(f"    · 재무페이지 {nav_message}")
                                 if ok:
-                                    wait.until(lambda d: d.find_elements(By.TAG_NAME, "body"))
-                                    time.sleep(0.5)
+                                    wait_for_detail_area(driver, timeout=8)
+                                    stop_loading(driver)
+                                    time.sleep(0.3)
                                     finance = get_finance_from_page(driver)
                                 else:
                                     finance = get_finance_from_page(driver)
