@@ -10,7 +10,7 @@ import pandas as pd
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 from backend.iros_crawler import IROS_RESULT_COLUMNS, run_iros_crawler_events
-from backend.saramin_crawler import SARAMIN_RESULT_COLUMNS, run_saramin_crawler_events
+from backend.saramin_crawler import SARAMIN_RESULT_COLUMNS, get_saramin_result_columns, run_saramin_crawler_events
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -187,6 +187,8 @@ def api_saramin_run():
         return jsonify({"ok": False, "message": "선택한 열에 크롤링할 회사명이 없습니다."}), 400
 
     headless = request.form.get("headless", "true").lower() != "false"
+    collect_finance = request.form.get("collect_finance", "false").lower() == "true"
+    result_columns = get_saramin_result_columns(collect_finance)
 
     def ndjson(event: dict) -> str:
         return json.dumps(event, ensure_ascii=False) + "\n"
@@ -196,17 +198,19 @@ def api_saramin_run():
         for event in run_saramin_crawler_events(
             search_values,
             max_results_per_keyword=max_results_per_keyword,
+            collect_finance=collect_finance,
             headless=headless,
         ):
             if event.get("type") == "complete":
                 results = event.get("results", [])
-                excel_base64 = dataframe_to_excel_base64(results, columns=SARAMIN_RESULT_COLUMNS)
+                excel_base64 = dataframe_to_excel_base64(results, columns=result_columns)
 
                 event.update({
                     "ok": True,
                     "total_input": len(search_values),
                     "total_result": len(results),
-                    "columns": SARAMIN_RESULT_COLUMNS,
+                    "columns": result_columns,
+                    "collect_finance": collect_finance,
                     "excel_base64": excel_base64,
                     "filename": "사람인_기업정보_크롤링_결과.xlsx",
                 })

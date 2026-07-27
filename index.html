@@ -477,8 +477,8 @@
             <div class="tool-card" id="crawler-card-iros" style="--card-glow: rgba(130, 200, 255, 0.15)">
               <div class="card-icon" style="background: rgba(130, 200, 255, 0.12)">🏛️</div>
               <span class="card-badge badge-live">LIVE</span>
-              <h3>등기소 크롤링</h3>
-              <p>상호명 기준 법인등록번호·본점소재지·등기상태 등 등기정보 수집</p>
+              <h3>등기소</h3>
+              <p>회사명 기준 법인등록번호·본점소재지·등기상태 등 등기정보 수집</p>
             </div>
             <div class="tool-card disabled" style="--card-glow: rgba(91, 110, 245, 0.15)">
               <div class="card-icon" style="background: rgba(91, 110, 245, 0.12)">📑</div>
@@ -504,8 +504,7 @@
             <div class="panel-title">IROS Crawler</div>
             <div class="panel-subtitle">인터넷등기소 상호검색</div>
             <div class="panel-desc">
-              엑셀 파일에서 회사명 열을 선택하면 인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.
-              크롤링은 실행 PC의 백그라운드 브라우저에서 진행됩니다.
+              인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.
             </div>
 
             <div class="crawler-alert" id="iros-server-status">서버 상태 확인 중...</div>
@@ -576,8 +575,7 @@
             <div class="panel-title">Saramin Crawler</div>
             <div class="panel-subtitle">사람인 기업정보 수집</div>
             <div class="panel-desc">
-              엑셀 파일에서 회사명 열을 선택하면 사람인 기업정보 검색 결과의 상위 기업을 기준으로 기업소개·재무정보를 수집합니다.
-              기본 수집 개수는 검색어별 최대 5개입니다.
+              사람인 기업정보 검색 결과의 상위 기업을 기준으로 기업정보를 수집합니다.
             </div>
 
             <div class="crawler-alert" id="saramin-server-status">서버 상태 확인 중...</div>
@@ -610,16 +608,23 @@
                 <div class="crawler-field">
                   <label>검색어별 수집 개수</label>
                   <select id="saramin-max-results">
-                    <option value="1">상위 1개</option>
+                    <option value="1" selected>상위 1개</option>
                     <option value="3">상위 3개</option>
-                    <option value="5" selected>상위 5개</option>
+                    <option value="5">상위 5개</option>
+                  </select>
+                </div>
+                <div class="crawler-field">
+                  <label>수집 범위</label>
+                  <select id="saramin-collect-finance">
+                    <option value="false" selected>기업소개만 빠르게 수집</option>
+                    <option value="true">기업소개 + 재무정보까지 수집</option>
                   </select>
                 </div>
               </div>
 
               <div class="crawler-option-box">
                 <div class="crawler-option-title">수집 항목</div>
-                <p>회사명, 설립일, 대표자명, 업종, 기업형태, 사원수, 매출액, 홈페이지, 사업내용, 주소, 사람인 URL, 재무정보 URL, 연도별 매출액·영업이익·당기순이익·자본금, 신용등급을 수집합니다.</p>
+                <p id="saramin-collect-desc">기업소개만 빠르게 수집할 때는 회사명, 설립일, 대표자명, 업종, 기업형태, 사원수, 매출액, 홈페이지, 사업내용, 주소, 사람인 URL만 저장합니다. 재무정보 관련 열은 생성하지 않습니다.</p>
               </div>
 
               <div class="crawler-preview-info" id="saramin-preview-info"></div>

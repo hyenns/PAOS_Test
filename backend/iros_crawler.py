@@ -32,8 +32,11 @@ def make_event(event_type: str, **payload: Any) -> dict[str, Any]:
     return {"type": event_type, **payload}
 
 
-def get_driver(*, headless: bool = True) -> webdriver.Chrome:
+def get_driver(*, headless: bool = True, page_load_strategy: str | None = None) -> webdriver.Chrome:
     options = Options()
+
+    if page_load_strategy:
+        options.page_load_strategy = page_load_strategy
 
     if headless:
         # Chrome 창을 띄우지 않고 백그라운드에서 실행합니다.

@@ -7,13 +7,13 @@ from urllib.parse import quote
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from backend.iros_crawler import get_driver, make_event
 
 SARAMIN_URL = "https://www.saramin.co.kr/zf_user/"
 
-SARAMIN_RESULT_COLUMNS = [
+SARAMIN_INTRO_COLUMNS = [
     "검색값",
     "회사명",
     "설립일",
@@ -27,6 +27,9 @@ SARAMIN_RESULT_COLUMNS = [
     "사업내용",
     "주소",
     "사람인URL",
+]
+
+SARAMIN_FINANCE_COLUMNS = [
     "사람인_재무정보URL",
     "재무_기준연도",
     "재무_매출액",
@@ -39,7 +42,14 @@ SARAMIN_RESULT_COLUMNS = [
 
 for _metric in ["매출액", "영업이익", "당기순이익", "자본금"]:
     for _year in ["2019", "2020", "2021", "2022", "2023", "2024", "2025"]:
-        SARAMIN_RESULT_COLUMNS.append(f"{_metric}_{_year}")
+        SARAMIN_FINANCE_COLUMNS.append(f"{_metric}_{_year}")
+
+SARAMIN_RESULT_COLUMNS = SARAMIN_INTRO_COLUMNS + SARAMIN_FINANCE_COLUMNS
+
+
+def get_saramin_result_columns(collect_finance: bool = False) -> list[str]:
+    """수집 범위에 맞는 결과 열 순서를 반환합니다."""
+    return SARAMIN_RESULT_COLUMNS if collect_finance else SARAMIN_INTRO_COLUMNS
 
 
 def clean_text(text: object) -> str:
@@ -140,6 +150,32 @@ def make_finance_url(corp_url: str) -> str:
     return corp_url.replace("/zf_user/company-info/view?", "/zf_user/company-info/view-inner-finance?")
 
 
+def safe_get(driver, url: str, *, timeout: int = 18) -> tuple[bool, str]:
+    """사람인 페이지 로딩이 오래 걸릴 때 전체 크롤링이 멈추지 않도록 이동합니다."""
+    try:
+        try:
+            driver.set_page_load_timeout(timeout)
+        except Exception:
+            pass
+
+        driver.get(url)
+        return True, ""
+
+    except TimeoutException:
+        # 문서 로딩은 오래 걸려도 body가 뜬 경우가 많으므로 로딩만 중단하고 계속 수집합니다.
+        try:
+            driver.execute_script("window.stop();")
+        except Exception:
+            pass
+        return True, "페이지 로딩 시간이 길어 강제로 중단 후 현재 화면 기준으로 수집합니다."
+
+    except WebDriverException as exc:
+        return False, str(exc)
+
+    except Exception as exc:
+        return False, str(exc)
+
+
 def get_finance_from_page(driver) -> dict[str, str]:
     finance: dict[str, str] = {
         "재무_기준연도": "",
@@ -232,6 +268,7 @@ def run_saramin_crawler_events(
     company_inputs: Iterable[str],
     *,
     max_results_per_keyword: int = 5,
+    collect_finance: bool = False,
     headless: bool = True,
 ) -> Iterator[dict[str, Any]]:
     """사람인 기업정보 크롤링을 실행하면서 진행 로그를 실시간 이벤트로 반환합니다."""
@@ -249,9 +286,23 @@ def run_saramin_crawler_events(
     driver = None
     try:
         yield log("🌐 사람인 기업정보 검색을 시작합니다.")
-        yield log(f"검색어별 상위 최대 {max_results_per_keyword}개 기업의 기업소개·재무정보를 수집합니다.")
+        if collect_finance:
+            yield log(f"검색어별 상위 최대 {max_results_per_keyword}개 기업의 기업소개·재무정보를 수집합니다.")
+        else:
+            yield log(f"검색어별 상위 최대 {max_results_per_keyword}개 기업의 기업소개만 빠르게 수집합니다.")
 
-        driver = get_driver(headless=headless)
+        driver = get_driver(headless=headless, page_load_strategy="eager")
+        try:
+            driver.set_page_load_timeout(18)
+            driver.set_script_timeout(18)
+        except Exception:
+            pass
+
+        if headless:
+            yield log("사람인 접속을 백그라운드로 진행합니다.")
+        else:
+            yield log("Chrome 창 표시 모드로 실행합니다. 화면에서 사람인 페이지 진행 상황을 확인할 수 있습니다.")
+
         wait = WebDriverWait(driver, 10)
 
         for idx, keyword in enumerate(company_inputs):
@@ -262,7 +313,13 @@ def run_saramin_crawler_events(
                 yield log(f"🔎 [{current_no}/{total}] {keyword} 검색 중...")
 
                 search_url = f"https://www.saramin.co.kr/zf_user/search/company?searchword={quote(keyword)}"
-                driver.get(search_url)
+                ok, nav_message = safe_get(driver, search_url, timeout=18)
+                if nav_message:
+                    yield log(f"  ↳ {nav_message}")
+                if not ok:
+                    yield log(f"⏭️ [{current_no}/{total}] {keyword} — 검색 페이지 접속 실패: {nav_message[:80]}")
+                    yield make_event("progress", current=current_no, total=total, result_count=len(results))
+                    continue
 
                 try:
                     wait.until(lambda d: "기업정보" in d.find_element(By.TAG_NAME, "body").text)
@@ -312,20 +369,15 @@ def run_saramin_crawler_events(
                     try:
                         yield log(f"  ↳ {corp['corp_name']} 상세정보 수집 중...")
 
-                        driver.get(corp["corp_url"])
+                        ok, nav_message = safe_get(driver, corp["corp_url"], timeout=18)
+                        if nav_message:
+                            yield log(f"    · 상세페이지 {nav_message}")
+                        if not ok:
+                            yield log(f"  ↳ {corp.get('corp_name', '기업명 없음')} — 상세페이지 접속 실패: {nav_message[:80]}")
+                            continue
                         wait.until(lambda d: d.find_elements(By.TAG_NAME, "body"))
-                        time.sleep(1)
+                        time.sleep(0.5)
                         detail = get_detail_from_page(driver)
-
-                        finance_url = make_finance_url(corp["corp_url"])
-                        finance: dict[str, str] = {}
-                        try:
-                            driver.get(finance_url)
-                            wait.until(lambda d: d.find_elements(By.TAG_NAME, "body"))
-                            time.sleep(1)
-                            finance = get_finance_from_page(driver)
-                        except Exception:
-                            finance = get_finance_from_page(driver)
 
                         row = {
                             "검색값": keyword,
@@ -341,9 +393,27 @@ def run_saramin_crawler_events(
                             "사업내용": detail.get("사업내용", ""),
                             "주소": detail.get("주소", ""),
                             "사람인URL": corp["corp_url"],
-                            "사람인_재무정보URL": finance_url,
                         }
-                        row.update(finance)
+
+                        if collect_finance:
+                            finance_url = make_finance_url(corp["corp_url"])
+                            finance: dict[str, str] = {}
+                            try:
+                                ok, nav_message = safe_get(driver, finance_url, timeout=18)
+                                if nav_message:
+                                    yield log(f"    · 재무페이지 {nav_message}")
+                                if ok:
+                                    wait.until(lambda d: d.find_elements(By.TAG_NAME, "body"))
+                                    time.sleep(0.5)
+                                    finance = get_finance_from_page(driver)
+                                else:
+                                    finance = get_finance_from_page(driver)
+                            except Exception:
+                                finance = get_finance_from_page(driver)
+
+                            row["사람인_재무정보URL"] = finance_url
+                            row.update(finance)
+
                         results.append(row)
                         count += 1
                     except Exception as e:
@@ -358,7 +428,7 @@ def run_saramin_crawler_events(
                 yield make_event("progress", current=current_no, total=total, result_count=len(results))
 
         yield log("🎉 사람인 크롤링 완료")
-        yield make_event("complete", results=results, logs=logs.copy())
+        yield make_event("complete", results=results, logs=logs.copy(), columns=get_saramin_result_columns(collect_finance), collect_finance=collect_finance)
 
     except Exception as e:
         yield make_event("error", message=f"사람인 크롤링 실패: {str(e)}", logs=logs.copy())
@@ -371,6 +441,7 @@ def run_saramin_crawler(
     company_inputs: Iterable[str],
     *,
     max_results_per_keyword: int = 5,
+    collect_finance: bool = False,
     headless: bool = True,
 ) -> tuple[list[dict], list[str]]:
     final_results: list[dict] = []
@@ -378,6 +449,7 @@ def run_saramin_crawler(
     for event in run_saramin_crawler_events(
         company_inputs,
         max_results_per_keyword=max_results_per_keyword,
+        collect_finance=collect_finance,
         headless=headless,
     ):
         if event.get("type") in {"log", "error", "complete"}:

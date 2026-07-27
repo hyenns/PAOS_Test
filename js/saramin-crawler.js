@@ -6,7 +6,7 @@ let saraminSelectedFile = null;
 let saraminResultExcelBase64 = null;
 let saraminResultFilename = '사람인_기업정보_크롤링_결과.xlsx';
 
-const SARAMIN_RESULT_COLUMNS = [
+const SARAMIN_INTRO_COLUMNS = [
   '검색값',
   '회사명',
   '설립일',
@@ -20,6 +20,9 @@ const SARAMIN_RESULT_COLUMNS = [
   '사업내용',
   '주소',
   '사람인URL',
+];
+
+const SARAMIN_FINANCE_COLUMNS = [
   '사람인_재무정보URL',
   '재무_기준연도',
   '재무_매출액',
@@ -58,6 +61,13 @@ const SARAMIN_RESULT_COLUMNS = [
   '자본금_2025',
 ];
 
+const SARAMIN_RESULT_COLUMNS = [...SARAMIN_INTRO_COLUMNS, ...SARAMIN_FINANCE_COLUMNS];
+
+function getSaraminPreferredColumns(collectFinance) {
+  return collectFinance ? SARAMIN_RESULT_COLUMNS : SARAMIN_INTRO_COLUMNS;
+}
+
+
 function excelColumnLetter(index) {
   let num = index + 1;
   let letters = '';
@@ -81,6 +91,15 @@ function escapeHtml(value) {
 function sheetRows(sheetName) {
   const ws = saraminWorkbook.Sheets[sheetName];
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+}
+
+function updateSaraminCollectDesc() {
+  const collectFinance = $('#saramin-collect-finance').val() === 'true';
+  if (collectFinance) {
+    $('#saramin-collect-desc').text('기업소개와 재무정보를 함께 수집합니다. 결과에는 재무정보 URL, 재무 기준연도, 연도별 매출액·영업이익·당기순이익·자본금, 신용등급 열이 포함됩니다.');
+  } else {
+    $('#saramin-collect-desc').text('기업소개만 빠르게 수집합니다. 결과에는 회사명, 설립일, 대표자명, 업종, 기업형태, 사원수, 매출액, 홈페이지, 사업내용, 주소, 사람인 URL만 저장하며 재무정보 관련 열은 생성하지 않습니다.');
+  }
 }
 
 function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders = null) {
@@ -291,7 +310,8 @@ async function runSaraminCrawler() {
   const sheetName = $('#saramin-sheet-select').val();
   const headerMode = $('#saramin-header-mode').val();
   const columnIndex = $('#saramin-column-select').val();
-  const maxResultsPerKeyword = $('#saramin-max-results').val() || '5';
+  const maxResultsPerKeyword = $('#saramin-max-results').val() || '1';
+  const collectFinance = $('#saramin-collect-finance').val() === 'true';
 
   const formData = new FormData();
   formData.append('file', saraminSelectedFile);
@@ -299,6 +319,8 @@ async function runSaraminCrawler() {
   formData.append('header_mode', headerMode);
   formData.append('column_index', columnIndex);
   formData.append('max_results_per_keyword', maxResultsPerKeyword);
+  formData.append('collect_finance', collectFinance ? 'true' : 'false');
+  // 기본 실행은 Chrome 창 없이 백그라운드에서 진행합니다.
   formData.append('headless', 'true');
 
   saraminResultExcelBase64 = null;
@@ -313,6 +335,7 @@ async function runSaraminCrawler() {
     items: [
       { label: '처리 상태', value: '사람인 접속 준비' },
       { label: '검색 방식', value: '엑셀 기준 열 검색' },
+      { label: '수집 범위', value: collectFinance ? '기업소개 + 재무정보' : '기업소개만' },
     ],
   }));
   appendSaraminLog('사람인 기업정보 검색을 시작합니다.');
@@ -349,10 +372,10 @@ async function runSaraminCrawler() {
       items: [
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
-        { label: '수집 항목', value: '기업소개 · 재무정보', desc: '상위 기업 상세정보 및 연도별 재무값' },
+        { label: '수집 항목', value: data.collect_finance ? '기업소개 · 재무정보' : '기업소개만', desc: data.collect_finance ? '상위 기업 상세정보 및 연도별 재무값' : '재무정보 관련 열 없이 기업소개 기본 열만 저장' },
       ],
     }));
-    renderTable('#saraminResultTable', data.results || [], 200, data.columns || SARAMIN_RESULT_COLUMNS);
+    renderTable('#saraminResultTable', data.results || [], 200, data.columns || getSaraminPreferredColumns(data.collect_finance));
   } catch (e) {
     $('#saraminStatsRow').html(renderSaraminSummary({
       title: '크롤링 실패',
@@ -406,6 +429,8 @@ export function initSaraminCrawler() {
   $('#saramin-sheet-select').on('change', updateSaraminColumnOptions);
   $('#saramin-header-mode').on('change', updateSaraminColumnOptions);
   $('#saramin-column-select').on('change', updateSaraminPreview);
+  $('#saramin-collect-finance').on('change', updateSaraminCollectDesc);
+  updateSaraminCollectDesc();
   $('#btn-run-saramin').on('click', runSaraminCrawler);
   $('#btn-download-saramin').on('click', downloadSaraminResult);
   $('#btn-reset-saramin, #btn-reset-saramin2').on('click', resetSaramin);
