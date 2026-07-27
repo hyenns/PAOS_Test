@@ -382,8 +382,7 @@ def run_saramin_crawler_events(
 
         driver = create_saramin_driver(hidden=headless)
 
-        if headless:
-        else:
+        if not headless:
             yield log("Chrome 창 표시 모드로 실행합니다. 화면에서 사람인 페이지 진행 상황을 확인할 수 있습니다.")
 
         wait = WebDriverWait(driver, 8)
