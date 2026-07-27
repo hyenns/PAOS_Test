@@ -465,7 +465,7 @@
         <div class="home-screen">
           <div class="greeting">Crawling Automation</div>
           <h2>사이트별 수집·정제,<br /><span>한 곳에서 관리.</span></h2>
-          <p class="subtitle">등기소 크롤링은 팀 테스트용으로 연결되어 있습니다. 실행 PC에서 서버를 켜두면 같은 사내망 사용자가 링크로 접속해 사용할 수 있습니다.</p>
+          <p class="subtitle">등기소·사람인 크롤링은 팀 테스트용으로 연결되어 있습니다. WorkLab 실행 파일로 서버를 켠 뒤 사용할 수 있습니다.</p>
 
           <div class="tool-cards">
             <div class="tool-card disabled" style="--card-glow: rgba(0, 229, 160, 0.15)">
@@ -486,11 +486,11 @@
               <h3>DART</h3>
               <p>기업개황, 공시, 임원현황 등 API·웹 수집</p>
             </div>
-            <div class="tool-card disabled" style="--card-glow: rgba(245, 197, 66, 0.15)">
+            <div class="tool-card" id="crawler-card-saramin" style="--card-glow: rgba(245, 197, 66, 0.15)">
               <div class="card-icon" style="background: rgba(245, 197, 66, 0.12)">👥</div>
-              <span class="card-badge badge-soon">SOON</span>
+              <span class="card-badge badge-live">LIVE</span>
               <h3>사람인</h3>
-              <p>채용 키워드 기반 기업 리스트·상세정보 수집</p>
+              <p>회사명 기준 사람인 기업정보·재무정보 수집</p>
             </div>
             <div class="tool-card disabled" style="--card-glow: rgba(0, 180, 255, 0.15)">
               <div class="card-icon" style="background: rgba(0, 180, 255, 0.12)">🌐</div>
@@ -505,7 +505,7 @@
             <div class="panel-subtitle">인터넷등기소 상호검색</div>
             <div class="panel-desc">
               엑셀 파일에서 회사명 열을 선택하면 인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.
-              팀 테스트 시에는 실행 PC의 Chrome 창에서 크롤링이 진행됩니다.
+              크롤링은 실행 PC의 백그라운드 브라우저에서 진행됩니다.
             </div>
 
             <div class="crawler-alert" id="iros-server-status">서버 상태 확인 중...</div>
@@ -571,6 +571,79 @@
               <div class="log-box"><ul id="irosLogList"></ul></div>
             </div>
           </section>
+
+          <section class="crawler-panel" id="saramin-panel" style="display: none">
+            <div class="panel-title">Saramin Crawler</div>
+            <div class="panel-subtitle">사람인 기업정보 수집</div>
+            <div class="panel-desc">
+              엑셀 파일에서 회사명 열을 선택하면 사람인 기업정보 검색 결과의 상위 기업을 기준으로 기업소개·재무정보를 수집합니다.
+              기본 수집 개수는 검색어별 최대 5개입니다.
+            </div>
+
+            <div class="crawler-alert" id="saramin-server-status">서버 상태 확인 중...</div>
+
+            <label class="upload-zone" for="saraminFileInput" id="saraminUploadZone">
+              <div class="up-icon">📂</div>
+              <h3>회사명이 들어있는 엑셀 파일을 업로드하세요</h3>
+              <p>.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능</p>
+              <input type="file" id="saraminFileInput" accept=".xlsx,.xls" style="display: none" />
+            </label>
+
+            <div id="saramin-settings" class="crawler-settings" style="display: none">
+              <div class="divider"></div>
+              <div class="crawler-form-row">
+                <div class="crawler-field">
+                  <label>시트 선택</label>
+                  <select id="saramin-sheet-select"></select>
+                </div>
+                <div class="crawler-field">
+                  <label>첫 번째 행 처리</label>
+                  <select id="saramin-header-mode">
+                    <option value="header">열 제목으로 사용</option>
+                    <option value="data">데이터로 포함</option>
+                  </select>
+                </div>
+                <div class="crawler-field">
+                  <label>크롤링 기준 열</label>
+                  <select id="saramin-column-select"></select>
+                </div>
+                <div class="crawler-field">
+                  <label>검색어별 수집 개수</label>
+                  <select id="saramin-max-results">
+                    <option value="1">상위 1개</option>
+                    <option value="3">상위 3개</option>
+                    <option value="5" selected>상위 5개</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="crawler-option-box">
+                <div class="crawler-option-title">수집 항목</div>
+                <p>회사명, 설립일, 대표자명, 업종, 기업형태, 사원수, 매출액, 홈페이지, 사업내용, 주소, 사람인 URL, 재무정보 URL, 연도별 매출액·영업이익·당기순이익·자본금, 신용등급을 수집합니다.</p>
+              </div>
+
+              <div class="crawler-preview-info" id="saramin-preview-info"></div>
+              <div class="table-scroll small" id="saramin-preview-table"></div>
+
+              <div class="action-row">
+                <button class="btn-accent" id="btn-run-saramin">🚀 사람인 크롤링 시작</button>
+                <button class="back-btn" id="btn-reset-saramin">🔄 다시 선택</button>
+              </div>
+            </div>
+
+            <div id="saramin-result-box" style="display: none">
+              <div class="divider"></div>
+              <div class="panel-subtitle">크롤링 결과</div>
+              <div class="stats-row" id="saraminStatsRow"></div>
+              <div class="action-row">
+                <button class="btn-accent-outline" id="btn-download-saramin">⬇️ 결과 다운로드 (.xlsx)</button>
+                <button class="back-btn" id="btn-reset-saramin2">🔄 처음부터</button>
+              </div>
+              <div class="table-scroll" id="saraminResultTable"></div>
+              <div class="log-box"><ul id="saraminLogList"></ul></div>
+            </div>
+          </section>
+
         </div>
       </div>
 

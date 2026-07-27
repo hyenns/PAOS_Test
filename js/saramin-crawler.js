@@ -1,20 +1,61 @@
-// ─── iros-crawler.js ───
-// 인터넷등기소 크롤링 화면 제어 + Python 백엔드 호출
+// ─── saramin-crawler.js ───
+// 사람인 기업정보 크롤링 화면 제어 + Python 백엔드 호출
 
-let workbook = null;
-let selectedFile = null;
-let resultExcelBase64 = null;
-let resultFilename = '등기소_크롤링_결과.xlsx';
+let saraminWorkbook = null;
+let saraminSelectedFile = null;
+let saraminResultExcelBase64 = null;
+let saraminResultFilename = '사람인_기업정보_크롤링_결과.xlsx';
 
-const IROS_RESULT_COLUMNS = [
+const SARAMIN_RESULT_COLUMNS = [
   '검색값',
-  '법인종류',
-  '상호(명칭)',
-  '법인등록번호',
-  '본점소재지',
-  '등기상태',
-  '상호말소상태',
-  '주말 여부',
+  '회사명',
+  '설립일',
+  '대표자명',
+  '업종',
+  '기업형태',
+  '사원수',
+  '매출액',
+  '평균연봉',
+  '홈페이지',
+  '사업내용',
+  '주소',
+  '사람인URL',
+  '사람인_재무정보URL',
+  '재무_기준연도',
+  '재무_매출액',
+  '재무_동종업계순위',
+  '재무_영업이익',
+  '재무_당기순이익',
+  '재무_자본금',
+  '신용등급',
+  '매출액_2019',
+  '매출액_2020',
+  '매출액_2021',
+  '매출액_2022',
+  '매출액_2023',
+  '매출액_2024',
+  '매출액_2025',
+  '영업이익_2019',
+  '영업이익_2020',
+  '영업이익_2021',
+  '영업이익_2022',
+  '영업이익_2023',
+  '영업이익_2024',
+  '영업이익_2025',
+  '당기순이익_2019',
+  '당기순이익_2020',
+  '당기순이익_2021',
+  '당기순이익_2022',
+  '당기순이익_2023',
+  '당기순이익_2024',
+  '당기순이익_2025',
+  '자본금_2019',
+  '자본금_2020',
+  '자본금_2021',
+  '자본금_2022',
+  '자본금_2023',
+  '자본금_2024',
+  '자본금_2025',
 ];
 
 function excelColumnLetter(index) {
@@ -38,7 +79,7 @@ function escapeHtml(value) {
 }
 
 function sheetRows(sheetName) {
-  const ws = workbook.Sheets[sheetName];
+  const ws = saraminWorkbook.Sheets[sheetName];
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 }
 
@@ -69,18 +110,18 @@ function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders
   $target.html(`<table>${thead}${tbody}</table>`);
 }
 
-function updateSheetOptions() {
-  if (!workbook) return;
-  const names = workbook.SheetNames || [];
-  $('#iros-sheet-select').html(names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join(''));
-  updateColumnOptions();
+function updateSaraminSheetOptions() {
+  if (!saraminWorkbook) return;
+  const names = saraminWorkbook.SheetNames || [];
+  $('#saramin-sheet-select').html(names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join(''));
+  updateSaraminColumnOptions();
 }
 
-function updateColumnOptions() {
-  if (!workbook) return;
+function updateSaraminColumnOptions() {
+  if (!saraminWorkbook) return;
 
-  const sheetName = $('#iros-sheet-select').val();
-  const headerMode = $('#iros-header-mode').val();
+  const sheetName = $('#saramin-sheet-select').val();
+  const headerMode = $('#saramin-header-mode').val();
   const rows = sheetRows(sheetName);
   const firstRow = rows[0] || [];
   const maxLen = rows.reduce((m, r) => Math.max(m, r.length), 0);
@@ -94,42 +135,41 @@ function updateColumnOptions() {
     options.push(`<option value="${i}">${escapeHtml(label)}</option>`);
   }
 
-  $('#iros-column-select').html(options.join(''));
-  updatePreview();
+  $('#saramin-column-select').html(options.join(''));
+  updateSaraminPreview();
 }
 
-function updatePreview() {
-  if (!workbook) return;
+function updateSaraminPreview() {
+  if (!saraminWorkbook) return;
 
-  const sheetName = $('#iros-sheet-select').val();
-  const headerMode = $('#iros-header-mode').val();
-  const columnIndex = Number($('#iros-column-select').val() || 0);
+  const sheetName = $('#saramin-sheet-select').val();
+  const headerMode = $('#saramin-header-mode').val();
+  const columnIndex = Number($('#saramin-column-select').val() || 0);
   const rows = sheetRows(sheetName);
   const dataRows = headerMode === 'header' ? rows.slice(1) : rows;
   const selectedValues = dataRows
     .map(r => String(r[columnIndex] ?? '').trim())
     .filter(v => v && v.toLowerCase() !== 'nan');
 
-  const selectedLabel = $('#iros-column-select option:selected').text();
-  $('#iros-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
-  renderTable('#iros-preview-table', rows, 10);
+  const selectedLabel = $('#saramin-column-select option:selected').text();
+  $('#saramin-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
+  renderTable('#saramin-preview-table', rows, 10);
 }
 
-async function checkServer() {
-  const $status = $('#iros-server-status');
+async function checkSaraminServer() {
+  const $status = $('#saramin-server-status');
   try {
     const res = await fetch('/api/health', { cache: 'no-store' });
     if (!res.ok) throw new Error('server not ok');
     const data = await res.json();
-    $status.removeClass('warn').addClass('ok').text(`✅ 서버 연결됨: ${data.app || 'WorkLab'} / 팀 테스트 가능`);
+    $status.removeClass('warn').addClass('ok').text(`✅ 서버 연결됨: ${data.app || 'WorkLab'} / 사람인 크롤링 가능`);
   } catch (e) {
-    $status.removeClass('ok').addClass('warn').html('⚠️ 현재 GitHub Pages 또는 정적 화면으로 접속한 상태일 수 있습니다. 등기소 크롤링은 <strong>run_worklab.bat</strong>으로 서버를 켠 뒤 <strong>http://실행PC_IP:8000</strong> 주소에서 실행해야 합니다.');
+    $status.removeClass('ok').addClass('warn').html('⚠️ 현재 GitHub Pages 또는 정적 화면으로 접속한 상태일 수 있습니다. 사람인 크롤링은 <strong>WorkLab 실행.bat</strong>으로 서버를 켠 뒤 실행해야 합니다.');
   }
 }
 
-
-function appendIrosLog(message) {
-  const $list = $('#irosLogList');
+function appendSaraminLog(message) {
+  const $list = $('#saraminLogList');
   $list.append(`<li>${escapeHtml(message)}</li>`);
 
   const listEl = $list[0];
@@ -139,7 +179,7 @@ function appendIrosLog(message) {
   }
 }
 
-function renderIrosSummary({ title = '크롤링 결과', badge = '', badgeType = 'default', items = [] }) {
+function renderSaraminSummary({ title = '크롤링 결과', badge = '', badgeType = 'default', items = [] }) {
   const badgeHtml = badge
     ? `<span class="iros-summary-badge ${escapeHtml(badgeType)}">${escapeHtml(badge)}</span>`
     : '';
@@ -156,7 +196,7 @@ function renderIrosSummary({ title = '크롤링 결과', badge = '', badgeType =
     <div class="iros-summary-card">
       <div class="iros-summary-head">
         <div>
-          <div class="iros-summary-kicker">IROS RESULT</div>
+          <div class="iros-summary-kicker">SARAMIN RESULT</div>
           <div class="iros-summary-title">${escapeHtml(title)}</div>
         </div>
         ${badgeHtml}
@@ -166,8 +206,8 @@ function renderIrosSummary({ title = '크롤링 결과', badge = '', badgeType =
   `;
 }
 
-function updateIrosProgress(current, total, resultCount) {
-  $('#irosStatsRow').html(renderIrosSummary({
+function updateSaraminProgress(current, total, resultCount) {
+  $('#saraminStatsRow').html(renderSaraminSummary({
     title: '검색 진행 중',
     badge: '진행 중',
     badgeType: 'progress',
@@ -179,7 +219,7 @@ function updateIrosProgress(current, total, resultCount) {
   }));
 }
 
-async function readIrosStream(response) {
+async function readSaraminStream(response) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
@@ -200,9 +240,9 @@ async function readIrosStream(response) {
       const event = JSON.parse(trimmed);
 
       if (event.type === 'log') {
-        appendIrosLog(event.message || '');
+        appendSaraminLog(event.message || '');
       } else if (event.type === 'progress') {
-        updateIrosProgress(event.current, event.total, event.result_count);
+        updateSaraminProgress(event.current, event.total, event.result_count);
       } else if (event.type === 'complete') {
         finalData = event;
       } else if (event.type === 'error') {
@@ -220,67 +260,65 @@ async function readIrosStream(response) {
   return finalData;
 }
 
-function resetIros() {
-  workbook = null;
-  selectedFile = null;
-  resultExcelBase64 = null;
-  $('#irosFileInput').val('');
-  $('#iros-settings').hide();
-  $('#iros-result-box').hide();
-  $('#iros-include-closed-records').prop('checked', false);
-  $('#iros-include-erased-names').prop('checked', false);
-  $('#iros-preview-table').empty();
-  $('#irosResultTable').empty();
-  $('#irosLogList').empty();
-  $('#irosStatsRow').empty();
+function resetSaramin() {
+  saraminWorkbook = null;
+  saraminSelectedFile = null;
+  saraminResultExcelBase64 = null;
+  $('#saraminFileInput').val('');
+  $('#saramin-settings').hide();
+  $('#saramin-result-box').hide();
+  $('#saramin-preview-table').empty();
+  $('#saraminResultTable').empty();
+  $('#saraminLogList').empty();
+  $('#saraminStatsRow').empty();
 }
 
-async function handleFile(file) {
-  selectedFile = file;
+async function handleSaraminFile(file) {
+  saraminSelectedFile = file;
   const data = await file.arrayBuffer();
-  workbook = XLSX.read(data, { type: 'array' });
-  $('#iros-settings').show();
-  $('#iros-result-box').hide();
-  updateSheetOptions();
+  saraminWorkbook = XLSX.read(data, { type: 'array' });
+  $('#saramin-settings').show();
+  $('#saramin-result-box').hide();
+  updateSaraminSheetOptions();
 }
 
-async function runIrosCrawler() {
-  if (!selectedFile || !workbook) {
+async function runSaraminCrawler() {
+  if (!saraminSelectedFile || !saraminWorkbook) {
     alert('먼저 엑셀 파일을 업로드해 주세요.');
     return;
   }
 
-  const sheetName = $('#iros-sheet-select').val();
-  const headerMode = $('#iros-header-mode').val();
-  const columnIndex = $('#iros-column-select').val();
+  const sheetName = $('#saramin-sheet-select').val();
+  const headerMode = $('#saramin-header-mode').val();
+  const columnIndex = $('#saramin-column-select').val();
+  const maxResultsPerKeyword = $('#saramin-max-results').val() || '5';
 
   const formData = new FormData();
-  formData.append('file', selectedFile);
+  formData.append('file', saraminSelectedFile);
   formData.append('sheet_name', sheetName);
   formData.append('header_mode', headerMode);
   formData.append('column_index', columnIndex);
-  formData.append('include_closed_records', $('#iros-include-closed-records').is(':checked') ? 'true' : 'false');
-  formData.append('include_erased_names', $('#iros-include-erased-names').is(':checked') ? 'true' : 'false');
+  formData.append('max_results_per_keyword', maxResultsPerKeyword);
   formData.append('headless', 'true');
 
-  resultExcelBase64 = null;
-  $('#btn-run-iros').prop('disabled', true).text('⏳ 크롤링 중...');
-  $('#iros-result-box').show();
-  $('#irosResultTable').empty();
-  $('#irosLogList').empty();
-  $('#irosStatsRow').html(renderIrosSummary({
+  saraminResultExcelBase64 = null;
+  $('#btn-run-saramin').prop('disabled', true).text('⏳ 크롤링 중...');
+  $('#saramin-result-box').show();
+  $('#saraminResultTable').empty();
+  $('#saraminLogList').empty();
+  $('#saraminStatsRow').html(renderSaraminSummary({
     title: '크롤링 준비 중',
     badge: '준비 중',
     badgeType: 'progress',
     items: [
-      { label: '처리 상태', value: '등기소 접속 준비' },
+      { label: '처리 상태', value: '사람인 접속 준비' },
       { label: '검색 방식', value: '엑셀 기준 열 검색' },
     ],
   }));
-  appendIrosLog('인터넷등기소 접속 및 검색을 시작합니다.');
+  appendSaraminLog('사람인 기업정보 검색을 시작합니다.');
 
   try {
-    const res = await fetch('/api/iros/run', { method: 'POST', body: formData });
+    const res = await fetch('/api/saramin/run', { method: 'POST', body: formData });
 
     if (!res.ok) {
       let errorMessage = '크롤링 실행 중 오류가 발생했습니다.';
@@ -294,30 +332,29 @@ async function runIrosCrawler() {
       throw new Error(errorMessage);
     }
 
-    const data = await readIrosStream(res);
+    const data = await readSaraminStream(res);
     if (!data || data.ok === false) {
       throw new Error(data?.message || '크롤링 결과를 받지 못했습니다.');
     }
 
-    resultExcelBase64 = data.excel_base64;
-    resultFilename = data.filename || resultFilename;
+    saraminResultExcelBase64 = data.excel_base64;
+    saraminResultFilename = data.filename || saraminResultFilename;
 
     const total = data.total_input ?? 0;
     const count = data.total_result ?? 0;
-    const statusText = data.status_has_value ? '상태값 수집됨' : '상태값 없음/미노출';
-    $('#irosStatsRow').html(renderIrosSummary({
+    $('#saraminStatsRow').html(renderSaraminSummary({
       title: '크롤링 완료',
-      badge: statusText,
-      badgeType: data.status_has_value ? 'success' : 'warning',
+      badge: count > 0 ? '수집 완료' : '결과 없음',
+      badgeType: count > 0 ? 'success' : 'warning',
       items: [
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
-        { label: '상태값', value: statusText, desc: '등기상태 · 상호말소상태 · 주말 여부' },
+        { label: '수집 항목', value: '기업소개 · 재무정보', desc: '상위 기업 상세정보 및 연도별 재무값' },
       ],
     }));
-    renderTable('#irosResultTable', data.results || [], 200, data.columns || IROS_RESULT_COLUMNS);
+    renderTable('#saraminResultTable', data.results || [], 200, data.columns || SARAMIN_RESULT_COLUMNS);
   } catch (e) {
-    $('#irosStatsRow').html(renderIrosSummary({
+    $('#saraminStatsRow').html(renderSaraminSummary({
       title: '크롤링 실패',
       badge: '오류',
       badgeType: 'warning',
@@ -326,63 +363,63 @@ async function runIrosCrawler() {
         { label: '확인 필요', value: '로그 확인' },
       ],
     }));
-    appendIrosLog(e.message);
+    appendSaraminLog(e.message);
     alert(e.message);
   } finally {
-    $('#btn-run-iros').prop('disabled', false).text('🚀 등기소 크롤링 시작');
+    $('#btn-run-saramin').prop('disabled', false).text('🚀 사람인 크롤링 시작');
   }
 }
 
-function downloadIrosResult() {
-  if (!resultExcelBase64) {
+function downloadSaraminResult() {
+  if (!saraminResultExcelBase64) {
     alert('다운로드할 결과가 없습니다. 먼저 크롤링을 실행해 주세요.');
     return;
   }
 
-  const byteChars = atob(resultExcelBase64);
+  const byteChars = atob(saraminResultExcelBase64);
   const byteNumbers = new Array(byteChars.length);
   for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
   const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = resultFilename;
+  a.download = saraminResultFilename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-export function showIrosPanel() {
-  $('#saramin-panel').hide();
-  $('#iros-panel').show();
-  document.getElementById('iros-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  checkServer();
+export function showSaraminPanel() {
+  $('#iros-panel').hide();
+  $('#saramin-panel').show();
+  document.getElementById('saramin-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  checkSaraminServer();
 }
 
-export function initIrosCrawler() {
-  $('#irosFileInput').on('change', async function () {
+export function initSaraminCrawler() {
+  $('#saraminFileInput').on('change', async function () {
     const file = this.files?.[0];
-    if (file) await handleFile(file);
+    if (file) await handleSaraminFile(file);
   });
 
-  $('#iros-sheet-select').on('change', updateColumnOptions);
-  $('#iros-header-mode').on('change', updateColumnOptions);
-  $('#iros-column-select').on('change', updatePreview);
-  $('#btn-run-iros').on('click', runIrosCrawler);
-  $('#btn-download-iros').on('click', downloadIrosResult);
-  $('#btn-reset-iros, #btn-reset-iros2').on('click', resetIros);
+  $('#saramin-sheet-select').on('change', updateSaraminColumnOptions);
+  $('#saramin-header-mode').on('change', updateSaraminColumnOptions);
+  $('#saramin-column-select').on('change', updateSaraminPreview);
+  $('#btn-run-saramin').on('click', runSaraminCrawler);
+  $('#btn-download-saramin').on('click', downloadSaraminResult);
+  $('#btn-reset-saramin, #btn-reset-saramin2').on('click', resetSaramin);
 
-  $('#irosUploadZone').on('dragover', function (e) {
+  $('#saraminUploadZone').on('dragover', function (e) {
     e.preventDefault();
     $(this).addClass('dragover');
   });
-  $('#irosUploadZone').on('dragleave drop', function () {
+  $('#saraminUploadZone').on('dragleave drop', function () {
     $(this).removeClass('dragover');
   });
-  $('#irosUploadZone').on('drop', async function (e) {
+  $('#saraminUploadZone').on('drop', async function (e) {
     e.preventDefault();
     const file = e.originalEvent.dataTransfer.files?.[0];
-    if (file) await handleFile(file);
+    if (file) await handleSaraminFile(file);
   });
 }

@@ -1317,8 +1317,9 @@ button:disabled {
   color: var(--muted);
 }
 
-/* 등기소 크롤링 결과 요약 카드 */
-#irosStatsRow {
+/* 크롤링 결과 요약 카드 */
+#irosStatsRow,
+#saraminStatsRow {
   display: block;
   margin: 10px 0 18px;
 }

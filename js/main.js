@@ -5,12 +5,14 @@ import { showScreen, goBack }             from './app.js';
 import { initExcelCleaner, goToStep, toggleOpt, addCaseRule, runCleaning, setResultView, downloadResult, resetExcel } from './excel-cleaner.js';
 import { initMerge, runMerge, downloadMergeResult, resetMerge } from './merge.js';
 import { initIrosCrawler, showIrosPanel } from './iros-crawler.js';
+import { initSaraminCrawler, showSaraminPanel } from './saramin-crawler.js';
 
 $(function () {
   // 모듈 초기화
   initExcelCleaner();
   initMerge();
   initIrosCrawler();
+  initSaraminCrawler();
 
   // ── 사이드바 / 홈 ──────────────────────────────────────────────────────────
   $('#sidebar-logo').on('click', () => showScreen('home'));
@@ -30,6 +32,7 @@ $(function () {
   $('#btn-back-crawling').on('click', goBack);
   $('#btn-home-crawling').on('click', () => showScreen('home'));
   $('#crawler-card-iros').on('click', showIrosPanel);
+  $('#crawler-card-saramin').on('click', showSaraminPanel);
 
   // ── 엑셀 정제 ─────────────────────────────────────────────────────────────
   // Topbar
