@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import base64
+import io
+import json
+import os
+from pathlib import Path
+
+import pandas as pd
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
+
+from backend.iros_crawler import IROS_RESULT_COLUMNS, run_iros_crawler_events
+
+BASE_DIR = Path(__file__).resolve().parent
+
+app = Flask(__name__)
+# JSON 응답의 키 순서가 자동 정렬되면 화면 미리보기 열 순서가 엑셀과 달라질 수 있어 비활성화합니다.
+app.json.sort_keys = False
+app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30MB
+
+
+def excel_column_letter(index: int) -> str:
+    index += 1
+    letters = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def read_search_values(file_bytes: bytes, sheet_name: str, header_mode: str, column_index: int) -> list[str]:
+    header = 0 if header_mode == "header" else None
+    df = pd.read_excel(
+        io.BytesIO(file_bytes),
+        sheet_name=sheet_name,
+        header=header,
+        dtype=str,
+    )
+    df = df.dropna(how="all").reset_index(drop=True)
+
+    if df.empty or len(df.columns) == 0:
+        return []
+
+    if column_index < 0 or column_index >= len(df.columns):
+        raise ValueError("선택한 열 번호가 엑셀 범위를 벗어났습니다.")
+
+    values: list[str] = []
+    for value in df.iloc[:, column_index].tolist():
+        if pd.isna(value):
+            continue
+        cleaned = str(value).strip()
+        if not cleaned or cleaned.lower() == "nan":
+            continue
+        values.append(cleaned)
+    return values
+
+
+def dataframe_to_excel_base64(rows: list[dict], columns: list[str] | None = None) -> str:
+    df = pd.DataFrame(rows, columns=columns) if columns else pd.DataFrame(rows)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="결과")
+    output.seek(0)
+    return base64.b64encode(output.read()).decode("utf-8")
+
+
+@app.route("/")
+def index():
+    return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.route("/<path:path>")
+def static_files(path: str):
+    target = BASE_DIR / path
+    if target.exists() and target.is_file():
+        return send_from_directory(BASE_DIR, path)
+    return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.route("/api/health")
+def health():
+    return jsonify({"ok": True, "app": "WorkLab PAOS", "mode": "team-test"})
+
+
+@app.route("/api/iros/run", methods=["POST"])
+def api_iros_run():
+    uploaded = request.files.get("file")
+    if not uploaded:
+        return jsonify({"ok": False, "message": "엑셀 파일이 업로드되지 않았습니다."}), 400
+
+    sheet_name = request.form.get("sheet_name", "")
+    header_mode = request.form.get("header_mode", "header")
+
+    try:
+        column_index = int(request.form.get("column_index", "0"))
+    except ValueError:
+        return jsonify({"ok": False, "message": "열 번호가 올바르지 않습니다."}), 400
+
+    try:
+        file_bytes = uploaded.read()
+        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index)
+    except Exception as e:
+        return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
+
+    if not search_values:
+        return jsonify({"ok": False, "message": "선택한 열에 크롤링할 회사명이 없습니다."}), 400
+
+    include_closed_records = request.form.get("include_closed_records", "false").lower() == "true"
+    include_erased_names = request.form.get("include_erased_names", "false").lower() == "true"
+
+    # 기본값은 Chrome 창을 띄우지 않는 백그라운드 모드입니다.
+    # 추후 문제가 생기면 프론트에서 headless=false를 넘기거나 환경변수/코드로 조정할 수 있습니다.
+    headless = request.form.get("headless", "true").lower() != "false"
+
+    def ndjson(event: dict) -> str:
+        return json.dumps(event, ensure_ascii=False) + "\n"
+
+    @stream_with_context
+    def generate():
+        for event in run_iros_crawler_events(
+            search_values,
+            include_closed_records=include_closed_records,
+            include_erased_names=include_erased_names,
+            headless=headless,
+        ):
+            if event.get("type") == "complete":
+                results = event.get("results", [])
+                excel_base64 = dataframe_to_excel_base64(results, columns=IROS_RESULT_COLUMNS)
+
+                status_columns = ["등기상태", "상호말소상태", "주말 여부"]
+                status_has_value = any(
+                    str(row.get(col, "")).strip()
+                    for row in results
+                    for col in status_columns
+                )
+
+                event.update({
+                    "ok": True,
+                    "total_input": len(search_values),
+                    "total_result": len(results),
+                    "status_has_value": status_has_value,
+                    "columns": IROS_RESULT_COLUMNS,
+                    "excel_base64": excel_base64,
+                    "filename": "등기소_크롤링_결과.xlsx",
+                })
+
+            yield ndjson(event)
+
+    return Response(
+        generate(),
+        mimetype="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+if __name__ == "__main__":
+    host = os.environ.get("WORKLAB_HOST", "0.0.0.0")
+    port = int(os.environ.get("WORKLAB_PORT", "8000"))
+    app.run(host=host, port=port, debug=False, threaded=True)

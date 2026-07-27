@@ -61,17 +61,34 @@ export function goToStep(n) {
     const anyActive = $(".opt-card.active").length > 0;
     if (!anyActive) {
       $("#step1-warn").show();
+      scrollToExcelPanel("#step-1");
       return;
     }
     $("#step1-warn").hide();
     updateSelOptsPreview();
     if (rawData.length > 0) showColSettings();
   }
+
   currentStep = n;
-  $(".step-panel").removeClass("active");
-  $(`#step-${n}`).addClass("active");
+
+  // 크롤링 화면처럼 같은 페이지 안에서 작업 패널이 아래로 펼쳐지도록 표시합니다.
+  // 1단계 옵션 카드는 계속 보이게 두고, 2/3단계만 필요한 시점에 아래에 열립니다.
+  $("#step-1").addClass("active");
+  $("#step-2").toggleClass("active", n >= 2);
+  $("#step-3").toggleClass("active", n >= 3);
+
   _updateStepIndicator(n);
-  $(".main").scrollTop(0);
+  scrollToExcelPanel(n === 1 ? "#step-1" : `#step-${n}`);
+}
+
+function scrollToExcelPanel(selector) {
+  const $main = $(".main");
+  const $target = $(selector);
+  if (!$main.length || !$target.length) return;
+
+  const current = $main.scrollTop();
+  const top = Math.max(0, current + $target.position().top - 88);
+  $main.stop(true).animate({ scrollTop: top }, 320);
 }
 
 function _updateStepIndicator(step) {

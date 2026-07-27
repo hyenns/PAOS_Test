@@ -128,7 +128,7 @@
           </div>
         </div>
 
-        <div class="excel-body">
+        <div class="excel-body inline-flow">
           <!-- Step indicator -->
           <div class="step-indicator">
             <div class="step-item active" id="si-1">
@@ -298,15 +298,15 @@
             </div>
 
             <div class="step-nav">
-              <button class="btn-accent" id="btn-to-step2">다음 — 파일 업로드 →</button>
+              <button class="btn-accent" id="btn-to-step2">선택 완료 — 아래에서 파일 업로드 ↓</button>
               <span id="step1-warn" style="font-size: 0.78rem; color: var(--danger); display: none">정제 옵션을 하나 이상 선택해주세요.</span>
             </div>
           </div>
 
           <!-- ── STEP 2: 파일 업로드 ── -->
-          <div class="step-panel" id="step-2">
+          <div class="step-panel workflow-panel" id="step-2">
             <div class="panel-title">Step 2</div>
-            <div class="panel-subtitle">정제할 파일을 올려주세요</div>
+            <div class="panel-subtitle">선택한 정제 작업을 실행할 파일을 올려주세요</div>
 
             <!-- 선택된 옵션 요약 -->
             <div class="selected-opts-preview" id="sel-opts-preview"></div>
@@ -413,14 +413,14 @@
 
             <div style="margin-top: 24px; display: none" id="step2-btns">
               <div class="step-nav">
-                <button class="back-btn" id="btn-back-to-step1">← 옵션 다시 선택</button>
+                <button class="back-btn" id="btn-back-to-step1">↑ 옵션 다시 선택</button>
                 <button class="btn-accent" id="btn-run">🚀 정제 실행</button>
               </div>
             </div>
           </div>
 
           <!-- ── STEP 3: 결과 ── -->
-          <div class="step-panel" id="step-3">
+          <div class="step-panel workflow-panel" id="step-3">
             <div class="panel-title">Step 3</div>
             <div class="panel-subtitle">정제 완료!</div>
 
@@ -465,7 +465,7 @@
         <div class="home-screen">
           <div class="greeting">Crawling Automation</div>
           <h2>사이트별 수집·정제,<br /><span>한 곳에서 관리.</span></h2>
-          <p class="subtitle">NICE BizInfo, 등기소, DART, 사람인, 홈페이지 기업정보 수집 등 자주 쓰는 크롤링 자동화 기능을 이 메뉴에 연결할 예정입니다.</p>
+          <p class="subtitle">등기소 크롤링은 팀 테스트용으로 연결되어 있습니다. 실행 PC에서 서버를 켜두면 같은 사내망 사용자가 링크로 접속해 사용할 수 있습니다.</p>
 
           <div class="tool-cards">
             <div class="tool-card disabled" style="--card-glow: rgba(0, 229, 160, 0.15)">
@@ -474,11 +474,11 @@
               <h3>NICE BizInfo</h3>
               <p>기업명·사업자번호 기준 기업 개요 정보 수집</p>
             </div>
-            <div class="tool-card disabled" style="--card-glow: rgba(130, 200, 255, 0.15)">
+            <div class="tool-card" id="crawler-card-iros" style="--card-glow: rgba(130, 200, 255, 0.15)">
               <div class="card-icon" style="background: rgba(130, 200, 255, 0.12)">🏛️</div>
-              <span class="card-badge badge-soon">SOON</span>
+              <span class="card-badge badge-live">LIVE</span>
               <h3>등기소 크롤링</h3>
-              <p>상호명 기준 법인등록번호·본점소재지 등 등기정보 수집</p>
+              <p>상호명 기준 법인등록번호·본점소재지·등기상태 등 등기정보 수집</p>
             </div>
             <div class="tool-card disabled" style="--card-glow: rgba(91, 110, 245, 0.15)">
               <div class="card-icon" style="background: rgba(91, 110, 245, 0.12)">📑</div>
@@ -499,6 +499,78 @@
               <p>홈페이지 URL 기반 사업자등록번호·전화번호·대표자명·회사명 등 추출</p>
             </div>
           </div>
+
+          <section class="crawler-panel" id="iros-panel" style="display: none">
+            <div class="panel-title">IROS Crawler</div>
+            <div class="panel-subtitle">인터넷등기소 상호검색</div>
+            <div class="panel-desc">
+              엑셀 파일에서 회사명 열을 선택하면 인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.
+              팀 테스트 시에는 실행 PC의 Chrome 창에서 크롤링이 진행됩니다.
+            </div>
+
+            <div class="crawler-alert" id="iros-server-status">서버 상태 확인 중...</div>
+
+            <label class="upload-zone" for="irosFileInput" id="irosUploadZone">
+              <div class="up-icon">📂</div>
+              <h3>회사명이 들어있는 엑셀 파일을 업로드하세요</h3>
+              <p>.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능</p>
+              <input type="file" id="irosFileInput" accept=".xlsx,.xls" style="display: none" />
+            </label>
+
+            <div id="iros-settings" class="crawler-settings" style="display: none">
+              <div class="divider"></div>
+              <div class="crawler-form-row">
+                <div class="crawler-field">
+                  <label>시트 선택</label>
+                  <select id="iros-sheet-select"></select>
+                </div>
+                <div class="crawler-field">
+                  <label>첫 번째 행 처리</label>
+                  <select id="iros-header-mode">
+                    <option value="header">열 제목으로 사용</option>
+                    <option value="data">데이터로 포함</option>
+                  </select>
+                </div>
+                <div class="crawler-field">
+                  <label>크롤링 기준 열</label>
+                  <select id="iros-column-select"></select>
+                </div>
+              </div>
+
+              <div class="crawler-option-box">
+                <div class="crawler-option-title">검색 옵션</div>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-include-closed-records" />
+                  <span>폐쇄등기기록 포함</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-include-erased-names" />
+                  <span>주말된 상호(명칭) 포함</span>
+                </label>
+                <p>선택하지 않은 옵션은 체크하지 않은 상태로 검색합니다.</p>
+              </div>
+
+              <div class="crawler-preview-info" id="iros-preview-info"></div>
+              <div class="table-scroll small" id="iros-preview-table"></div>
+
+              <div class="action-row">
+                <button class="btn-accent" id="btn-run-iros">🚀 등기소 크롤링 시작</button>
+                <button class="back-btn" id="btn-reset-iros">🔄 다시 선택</button>
+              </div>
+            </div>
+
+            <div id="iros-result-box" style="display: none">
+              <div class="divider"></div>
+              <div class="panel-subtitle">크롤링 결과</div>
+              <div class="stats-row" id="irosStatsRow"></div>
+              <div class="action-row">
+                <button class="btn-accent-outline" id="btn-download-iros">⬇️ 결과 다운로드 (.xlsx)</button>
+                <button class="back-btn" id="btn-reset-iros2">🔄 처음부터</button>
+              </div>
+              <div class="table-scroll" id="irosResultTable"></div>
+              <div class="log-box"><ul id="irosLogList"></ul></div>
+            </div>
+          </section>
         </div>
       </div>
 

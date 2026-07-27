@@ -1206,3 +1206,290 @@ tr:hover td {
     grid-column: 1 / -1 !important;
   }
 }
+
+
+/* ─── CRAWLING / IROS ─── */
+.crawler-panel {
+  margin-top: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 26px;
+}
+.crawler-alert {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: rgba(255, 255, 255, 0.03);
+}
+.crawler-alert.ok {
+  color: var(--accent);
+  border-color: rgba(0, 229, 160, 0.28);
+  background: rgba(0, 229, 160, 0.06);
+}
+.crawler-alert.warn {
+  color: #f5c542;
+  border-color: rgba(245, 197, 66, 0.28);
+  background: rgba(245, 197, 66, 0.06);
+}
+.crawler-form-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+.crawler-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 190px;
+}
+.crawler-field label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.crawler-field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+.crawler-preview-info {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 10px 0;
+  line-height: 1.6;
+}
+.table-scroll.small {
+  max-height: 260px;
+  margin-bottom: 16px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 등기소 크롤링 검색 옵션 */
+.crawler-option-box {
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.crawler-option-title {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.crawler-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 18px;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.crawler-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.crawler-option-box p {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* 등기소 크롤링 결과 요약 카드 */
+#irosStatsRow {
+  display: block;
+  margin: 10px 0 18px;
+}
+
+.iros-summary-card {
+  width: 100%;
+  max-width: 680px;
+  border: 1px solid rgba(0, 229, 160, 0.16);
+  border-radius: 16px;
+  padding: 16px 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 229, 160, 0.08), rgba(91, 110, 245, 0.035)),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+}
+
+.iros-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.iros-summary-kicker {
+  font-size: 0.62rem;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.iros-summary-title {
+  font-size: 0.98rem;
+  line-height: 1.3;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.iros-summary-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.iros-summary-badge.success {
+  border-color: rgba(0, 229, 160, 0.24);
+  background: rgba(0, 229, 160, 0.095);
+  color: var(--accent);
+}
+
+.iros-summary-badge.warning {
+  border-color: rgba(245, 197, 66, 0.24);
+  background: rgba(245, 197, 66, 0.09);
+  color: #f5c542;
+}
+
+.iros-summary-badge.progress {
+  border-color: rgba(91, 110, 245, 0.24);
+  background: rgba(91, 110, 245, 0.11);
+  color: #aab3ff;
+}
+
+.iros-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.iros-summary-item {
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(14, 15, 20, 0.46);
+}
+
+.iros-summary-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.iros-summary-value {
+  font-size: 1rem;
+  line-height: 1.25;
+  color: var(--text);
+  font-weight: 800;
+  word-break: keep-all;
+}
+
+.iros-summary-desc {
+  margin-top: 5px;
+  font-size: 0.67rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .iros-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .iros-summary-head {
+    flex-direction: column;
+  }
+}
+
+
+/* 엑셀 정제: 카드 선택 후 아래 작업창이 펼쳐지는 구조 */
+.excel-body.inline-flow .step-indicator {
+  margin-bottom: 26px;
+}
+
+.excel-body.inline-flow #step-1 {
+  padding-bottom: 6px;
+}
+
+.excel-body.inline-flow .workflow-panel {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 229, 160, 0.045), rgba(91, 110, 245, 0.025)),
+    rgba(255, 255, 255, 0.024);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.18);
+}
+
+.excel-body.inline-flow .workflow-panel.active {
+  animation: workflowPanelOpen 0.24s ease-out;
+}
+
+@keyframes workflowPanelOpen {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.excel-body.inline-flow .selected-opts-preview {
+  margin-bottom: 18px;
+}
+
+.excel-body.inline-flow .preview-box {
+  margin-top: 18px;
+}
+
+.excel-body.inline-flow #step2-btns .step-nav,
+.excel-body.inline-flow #step-3 .action-row {
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .excel-body.inline-flow .workflow-panel {
+    padding: 18px;
+    border-radius: 16px;
+  }
+}

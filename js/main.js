@@ -4,11 +4,13 @@
 import { showScreen, goBack }             from './app.js';
 import { initExcelCleaner, goToStep, toggleOpt, addCaseRule, runCleaning, setResultView, downloadResult, resetExcel } from './excel-cleaner.js';
 import { initMerge, runMerge, downloadMergeResult, resetMerge } from './merge.js';
+import { initIrosCrawler, showIrosPanel } from './iros-crawler.js';
 
 $(function () {
   // 모듈 초기화
   initExcelCleaner();
   initMerge();
+  initIrosCrawler();
 
   // ── 사이드바 / 홈 ──────────────────────────────────────────────────────────
   $('#sidebar-logo').on('click', () => showScreen('home'));
@@ -27,6 +29,7 @@ $(function () {
   // ── 크롤링 ───────────────────────────────────────────────────────────────
   $('#btn-back-crawling').on('click', goBack);
   $('#btn-home-crawling').on('click', () => showScreen('home'));
+  $('#crawler-card-iros').on('click', showIrosPanel);
 
   // ── 엑셀 정제 ─────────────────────────────────────────────────────────────
   // Topbar
