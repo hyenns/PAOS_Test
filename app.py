@@ -56,11 +56,77 @@ def read_search_values(file_bytes: bytes, sheet_name: str, header_mode: str, col
     return values
 
 
+def apply_result_excel_style(worksheet) -> None:
+    """크롤링 결과 엑셀 파일의 가독성을 높이는 공통 서식입니다."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    max_row = worksheet.max_row or 1
+    max_column = worksheet.max_column or 1
+
+    # 첫 행 고정 + 필터
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    header_fill = PatternFill("solid", fgColor="00B894")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin_border = Border(
+        left=Side(style="thin", color="D9E2EC"),
+        right=Side(style="thin", color="D9E2EC"),
+        top=Side(style="thin", color="D9E2EC"),
+        bottom=Side(style="thin", color="D9E2EC"),
+    )
+    body_alignment = Alignment(vertical="center", wrap_text=False)
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    worksheet.row_dimensions[1].height = 22
+
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    for row in worksheet.iter_rows(min_row=2, max_row=max_row, max_col=max_column):
+        for cell in row:
+            cell.alignment = body_alignment
+            cell.border = thin_border
+
+    # 내용 길이에 맞춰 열 너비 조정
+    for column_index in range(1, max_column + 1):
+        column_letter = get_column_letter(column_index)
+        header_value = worksheet.cell(row=1, column=column_index).value
+        header_text = str(header_value or "")
+        max_length = len(header_text)
+
+        for cell in worksheet[column_letter]:
+            value = cell.value
+            if value is None:
+                continue
+            value_text = str(value)
+            # 줄바꿈 데이터는 가장 긴 줄 기준으로 계산합니다.
+            max_length = max(max_length, *(len(part) for part in value_text.splitlines()))
+
+        width = max_length + 3
+        if any(keyword in header_text for keyword in ["주소", "소재지", "사업내용"]):
+            width = min(max(width, 18), 55)
+        elif "URL" in header_text or "홈페이지" in header_text:
+            width = min(max(width, 18), 50)
+        elif any(keyword in header_text for keyword in ["법인등록번호", "사업자등록번호"]):
+            width = min(max(width, 18), 24)
+        else:
+            width = min(max(width, 10), 28)
+
+        worksheet.column_dimensions[column_letter].width = width
+
+
 def dataframe_to_excel_base64(rows: list[dict], columns: list[str] | None = None) -> str:
     df = pd.DataFrame(rows, columns=columns) if columns else pd.DataFrame(rows)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="결과")
+        worksheet = writer.sheets["결과"]
+        apply_result_excel_style(worksheet)
     output.seek(0)
     return base64.b64encode(output.read()).decode("utf-8")
 
