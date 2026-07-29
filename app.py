@@ -68,8 +68,9 @@ def apply_result_excel_style(worksheet) -> None:
     worksheet.freeze_panes = "A2"
     worksheet.auto_filter.ref = worksheet.dimensions
 
-    header_fill = PatternFill("solid", fgColor="00B894")
-    header_font = Font(color="FFFFFF", bold=True)
+    # 요청 반영: 헤더는 초록색이 아닌 회색으로 표시
+    header_fill = PatternFill(fill_type="solid", fgColor="D9D9D9")
+    header_font = Font(color="000000", bold=True)
     thin_border = Border(
         left=Side(style="thin", color="D9E2EC"),
         right=Side(style="thin", color="D9E2EC"),
@@ -104,8 +105,9 @@ def apply_result_excel_style(worksheet) -> None:
             if value is None:
                 continue
             value_text = str(value)
-            # 줄바꿈 데이터는 가장 긴 줄 기준으로 계산합니다.
-            max_length = max(max_length, *(len(part) for part in value_text.splitlines()))
+            # 빈 문자열인 셀이 있어도 오류가 나지 않도록 안전하게 계산합니다.
+            parts = value_text.splitlines() or [value_text]
+            max_length = max(max_length, max(len(part) for part in parts))
 
         width = max_length + 3
         if any(keyword in header_text for keyword in ["주소", "소재지", "사업내용"]):
