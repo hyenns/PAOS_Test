@@ -549,6 +549,27 @@
                 <p>선택하지 않은 옵션은 체크하지 않은 상태로 검색합니다.</p>
               </div>
 
+              <div class="crawler-option-box">
+                <div class="crawler-option-title">완료 후 회사 형식 정제</div>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-clean-enabled" />
+                  <span>다운로드 엑셀에 정제결과 시트 추가</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-clean-split-name" checked />
+                  <span>상호(명칭) 한글/영문 분리</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-clean-remove-reg-hyphen" checked />
+                  <span>법인등록번호 하이픈(-) 제거</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="iros-clean-standardize-address" checked />
+                  <span>본점소재지 시도명만 회사 표준 약어로 변경</span>
+                </label>
+                <p>예: 서울특별시 강남구 → 서울 강남구 / 경기도 성남시 → 경기 성남시</p>
+              </div>
+
               <div class="crawler-preview-info" id="iros-preview-info"></div>
               <div class="table-scroll small" id="iros-preview-table"></div>
 
@@ -625,6 +646,35 @@
               <div class="crawler-option-box">
                 <div class="crawler-option-title">수집 항목</div>
                 <p id="saramin-collect-desc">기업소개만 빠르게 수집할 때는 회사명, 설립일, 대표자명, 업종, 기업형태, 사원수, 매출액, 홈페이지, 사업내용, 주소, 사람인 URL만 저장합니다. 재무정보 관련 열은 생성하지 않습니다.</p>
+              </div>
+
+              <div class="crawler-option-box">
+                <div class="crawler-option-title">완료 후 회사 형식 정제</div>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-enabled" />
+                  <span>다운로드 엑셀에 정제결과 시트 추가</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-company-name" checked />
+                  <span>회사명에서 (주), 주식회사 제거</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-establish-date" checked />
+                  <span>설립일 YYYY-MM-DD 형식으로 변환</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-employee-count" checked />
+                  <span>사원수에서 '명' 제거 후 숫자만 표시</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-homepage" checked />
+                  <span>홈페이지에서 http://, https:// 제거</span>
+                </label>
+                <label class="crawler-check">
+                  <input type="checkbox" id="saramin-clean-money-to-million" checked />
+                  <span>매출액·재무 금액을 백만원 단위 숫자로 변환</span>
+                </label>
+                <p>예: 173억 8,356만원 → 17,383 / 소수점은 버리고 쉼표를 표시합니다.</p>
               </div>
 
               <div class="crawler-preview-info" id="saramin-preview-info"></div>

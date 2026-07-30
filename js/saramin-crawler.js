@@ -290,6 +290,12 @@ function resetSaramin() {
   $('#saraminResultTable').empty();
   $('#saraminLogList').empty();
   $('#saraminStatsRow').empty();
+  $('#saramin-clean-enabled').prop('checked', false);
+  $('#saramin-clean-company-name').prop('checked', true);
+  $('#saramin-clean-establish-date').prop('checked', true);
+  $('#saramin-clean-employee-count').prop('checked', true);
+  $('#saramin-clean-homepage').prop('checked', true);
+  $('#saramin-clean-money-to-million').prop('checked', true);
 }
 
 async function handleSaraminFile(file) {
@@ -320,6 +326,12 @@ async function runSaraminCrawler() {
   formData.append('column_index', columnIndex);
   formData.append('max_results_per_keyword', maxResultsPerKeyword);
   formData.append('collect_finance', collectFinance ? 'true' : 'false');
+  formData.append('clean_saramin_enabled', $('#saramin-clean-enabled').is(':checked') ? 'true' : 'false');
+  formData.append('clean_saramin_company_name', $('#saramin-clean-company-name').is(':checked') ? 'true' : 'false');
+  formData.append('clean_saramin_establish_date', $('#saramin-clean-establish-date').is(':checked') ? 'true' : 'false');
+  formData.append('clean_saramin_employee_count', $('#saramin-clean-employee-count').is(':checked') ? 'true' : 'false');
+  formData.append('clean_saramin_homepage', $('#saramin-clean-homepage').is(':checked') ? 'true' : 'false');
+  formData.append('clean_saramin_money_to_million', $('#saramin-clean-money-to-million').is(':checked') ? 'true' : 'false');
   // 기본 실행은 Chrome 창 없이 백그라운드에서 진행합니다.
   formData.append('headless', 'true');
 
@@ -373,6 +385,7 @@ async function runSaraminCrawler() {
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
         { label: '수집 항목', value: data.collect_finance ? '기업소개 · 재무정보' : '기업소개만', desc: data.collect_finance ? '상위 기업 상세정보 및 연도별 재무값' : '재무정보 관련 열 없이 기업소개 기본 열만 저장' },
+        { label: '정제 시트', value: data.clean_sheet_added ? '추가됨' : '미추가' },
       ],
     }));
     renderTable('#saraminResultTable', data.results || [], 200, data.columns || getSaraminPreferredColumns(data.collect_finance));

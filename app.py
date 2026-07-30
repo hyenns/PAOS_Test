@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -122,13 +123,246 @@ def apply_result_excel_style(worksheet) -> None:
         worksheet.column_dimensions[column_letter].width = width
 
 
-def dataframe_to_excel_base64(rows: list[dict], columns: list[str] | None = None) -> str:
+# 회사 내부 표준 주소 표기: 도/광역시 전체 명칭을 약어로 바꾸되, 뒤 주소는 그대로 유지합니다.
+PROVINCE_REPLACEMENTS = [
+    ("서울특별시", "서울"),
+    ("부산광역시", "부산"),
+    ("대구광역시", "대구"),
+    ("인천광역시", "인천"),
+    ("광주광역시", "광주"),
+    ("대전광역시", "대전"),
+    ("울산광역시", "울산"),
+    ("세종특별자치시", "세종"),
+    ("경기도", "경기"),
+    ("강원특별자치도", "강원"),
+    ("강원도", "강원"),
+    ("충청북도", "충북"),
+    ("충청남도", "충남"),
+    ("전북특별자치도", "전북"),
+    ("전라북도", "전북"),
+    ("전라남도", "전남"),
+    ("경상북도", "경북"),
+    ("경상남도", "경남"),
+    ("제주특별자치도", "제주"),
+    ("제주도", "제주"),
+]
+
+MONEY_COLUMNS = ["매출액", "영업이익", "당기순이익", "자본금", "평균연봉"]
+
+
+def clean_text_value(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def standardize_province_in_address(value: object) -> str:
+    """시도명만 회사 표준 약어로 바꾸고, 시군구 이하 주소는 그대로 둡니다."""
+    text = clean_text_value(value)
+    if not text:
+        return ""
+
+    for full_name, short_name in PROVINCE_REPLACEMENTS:
+        match = re.match(rf"^\s*{re.escape(full_name)}\s*", text)
+        if match:
+            rest = text[match.end():].strip()
+            return f"{short_name} {rest}".strip()
+
+    return text
+
+
+def split_korean_english_name(value: object) -> tuple[str, str]:
+    text = clean_text_value(value)
+    if not text:
+        return "", ""
+
+    # 예: 큐픽스(Cupix, Inc.) -> 큐픽스 / Cupix, Inc.
+    match = re.match(r"^(.*?)\s*\(([^()]*)\)\s*$", text)
+    if match:
+        korean_name = clean_text_value(match.group(1))
+        english_name = clean_text_value(match.group(2))
+        return korean_name, english_name
+
+    return text, ""
+
+
+def remove_company_prefix(value: object) -> str:
+    text = clean_text_value(value)
+    if not text:
+        return ""
+    text = text.replace("㈜", "")
+    text = re.sub(r"^\s*(?:\(주\)|（주）|주식회사)\s*", "", text)
+    text = re.sub(r"\s*(?:\(주\)|（주）|주식회사)\s*$", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def normalize_establish_date(value: object) -> str:
+    text = clean_text_value(value)
+    if not text:
+        return ""
+
+    match = re.search(r"(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", text)
+    if match:
+        year, month, day = map(int, match.groups())
+        return f"{year:04d}-{month:02d}-{day:02d}"
+
+    match = re.search(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text)
+    if match:
+        year, month, day = map(int, match.groups())
+        return f"{year:04d}-{month:02d}-{day:02d}"
+
+    return text
+
+
+def clean_employee_count(value: object) -> str:
+    text = clean_text_value(value)
+    if not text:
+        return ""
+    number_text = re.sub(r"[^0-9]", "", text)
+    if not number_text:
+        return ""
+    return f"{int(number_text):,}"
+
+
+def clean_homepage_url(value: object) -> str:
+    text = clean_text_value(value)
+    if not text:
+        return ""
+    text = re.sub(r"^https?://", "", text, flags=re.I)
+    return text.rstrip("/").strip()
+
+
+def format_million_integer_without_rounding(value) -> str:
+    try:
+        from decimal import Decimal, ROUND_DOWN
+        decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+    except Exception:
+        return ""
+
+    # 백만원 미만 소수점은 반올림하지 않고 버립니다. 예: 17,383.56 -> 17,383
+    integer_value = decimal_value.quantize(Decimal("1"), rounding=ROUND_DOWN)
+    return f"{int(integer_value):,}"
+
+
+def parse_korean_money_to_million(value: object) -> str:
+    """사람인 금액 텍스트를 백만원 단위 정수 문자열로 변환합니다. 소수점은 반올림 없이 버립니다."""
+    from decimal import Decimal
+
+    text = clean_text_value(value)
+    if not text or text in {"-", "--", "없음"}:
+        return ""
+
+    # 전년대비/순위 등 부가 문구가 섞여 있어도 단위 숫자만 계산합니다.
+    total = Decimal("0")
+    found_unit = False
+
+    unit_multipliers = [
+        ("조", Decimal("1000000")),
+        ("억", Decimal("100")),
+        ("만원", Decimal("0.01")),
+    ]
+
+    for unit, multiplier in unit_multipliers:
+        match = re.search(rf"([-+]?\d[\d,]*(?:\.\d+)?)\s*{unit}", text)
+        if match:
+            number = Decimal(match.group(1).replace(",", ""))
+            total += number * multiplier
+            found_unit = True
+
+    if not found_unit:
+        match = re.search(r"[-+]?\d[\d,]*(?:\.\d+)?", text)
+        if not match:
+            return ""
+        # 이미 숫자만 있는 값은 백만원 단위 숫자로 보고 쉼표만 정리합니다.
+        total = Decimal(match.group(0).replace(",", ""))
+
+    return format_million_integer_without_rounding(total)
+
+
+def build_iros_clean_rows(rows: list[dict], options: dict[str, bool]) -> tuple[list[dict], list[str]]:
+    split_name = options.get("split_name", False)
+    remove_reg_hyphen = options.get("remove_reg_hyphen", False)
+    standardize_address = options.get("standardize_address", False)
+
+    clean_columns: list[str] = []
+    for column in IROS_RESULT_COLUMNS:
+        if column == "상호(명칭)" and split_name:
+            clean_columns.extend(["상호_국문", "상호_영문"])
+        else:
+            clean_columns.append(column)
+
+    clean_rows: list[dict] = []
+    for row in rows:
+        clean_row: dict = {}
+        for column in IROS_RESULT_COLUMNS:
+            value = row.get(column, "")
+
+            if column == "상호(명칭)" and split_name:
+                korean_name, english_name = split_korean_english_name(value)
+                clean_row["상호_국문"] = korean_name
+                clean_row["상호_영문"] = english_name
+                continue
+
+            if column == "법인등록번호" and remove_reg_hyphen:
+                value = clean_text_value(value).replace("-", "")
+            elif column == "본점소재지" and standardize_address:
+                value = standardize_province_in_address(value)
+
+            clean_row[column] = value
+        clean_rows.append(clean_row)
+
+    return clean_rows, clean_columns
+
+
+def build_saramin_clean_rows(rows: list[dict], columns: list[str], options: dict[str, bool]) -> tuple[list[dict], list[str]]:
+    clean_company = options.get("company_name", False)
+    clean_date = options.get("establish_date", False)
+    clean_employee = options.get("employee_count", False)
+    clean_homepage = options.get("homepage", False)
+    clean_money = options.get("money_to_million", False)
+
+    clean_rows: list[dict] = []
+    for row in rows:
+        clean_row: dict = {}
+        for column in columns:
+            value = row.get(column, "")
+
+            if column == "회사명" and clean_company:
+                value = remove_company_prefix(value)
+            elif column == "설립일" and clean_date:
+                value = normalize_establish_date(value)
+            elif column == "사원수" and clean_employee:
+                value = clean_employee_count(value)
+            elif column == "홈페이지" and clean_homepage:
+                value = clean_homepage_url(value)
+            elif clean_money and any(keyword in column for keyword in MONEY_COLUMNS):
+                value = parse_korean_money_to_million(value)
+
+            clean_row[column] = value
+        clean_rows.append(clean_row)
+
+    return clean_rows, columns
+
+
+def dataframe_to_excel_base64(
+    rows: list[dict],
+    columns: list[str] | None = None,
+    *,
+    clean_rows: list[dict] | None = None,
+    clean_columns: list[str] | None = None,
+) -> str:
     df = pd.DataFrame(rows, columns=columns) if columns else pd.DataFrame(rows)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="결과")
-        worksheet = writer.sheets["결과"]
-        apply_result_excel_style(worksheet)
+        apply_result_excel_style(writer.sheets["결과"])
+
+        if clean_rows is not None:
+            clean_df = pd.DataFrame(clean_rows, columns=clean_columns) if clean_columns else pd.DataFrame(clean_rows)
+            clean_df.to_excel(writer, index=False, sheet_name="정제결과")
+            apply_result_excel_style(writer.sheets["정제결과"])
+
     output.seek(0)
     return base64.b64encode(output.read()).decode("utf-8")
 
@@ -177,6 +411,13 @@ def api_iros_run():
     include_closed_records = request.form.get("include_closed_records", "false").lower() == "true"
     include_erased_names = request.form.get("include_erased_names", "false").lower() == "true"
 
+    clean_iros_enabled = request.form.get("clean_iros_enabled", "false").lower() == "true"
+    iros_clean_options = {
+        "split_name": request.form.get("clean_iros_split_name", "false").lower() == "true",
+        "remove_reg_hyphen": request.form.get("clean_iros_remove_reg_hyphen", "false").lower() == "true",
+        "standardize_address": request.form.get("clean_iros_standardize_address", "false").lower() == "true",
+    }
+
     # 기본값은 Chrome 창을 띄우지 않는 백그라운드 모드입니다.
     # 추후 문제가 생기면 프론트에서 headless=false를 넘기거나 환경변수/코드로 조정할 수 있습니다.
     headless = request.form.get("headless", "true").lower() != "false"
@@ -194,7 +435,17 @@ def api_iros_run():
         ):
             if event.get("type") == "complete":
                 results = event.get("results", [])
-                excel_base64 = dataframe_to_excel_base64(results, columns=IROS_RESULT_COLUMNS)
+                clean_rows = None
+                clean_columns = None
+                if clean_iros_enabled and any(iros_clean_options.values()):
+                    clean_rows, clean_columns = build_iros_clean_rows(results, iros_clean_options)
+
+                excel_base64 = dataframe_to_excel_base64(
+                    results,
+                    columns=IROS_RESULT_COLUMNS,
+                    clean_rows=clean_rows,
+                    clean_columns=clean_columns,
+                )
 
                 status_columns = ["등기상태", "상호말소상태", "주말 여부"]
                 status_has_value = any(
@@ -209,6 +460,7 @@ def api_iros_run():
                     "total_result": len(results),
                     "status_has_value": status_has_value,
                     "columns": IROS_RESULT_COLUMNS,
+                    "clean_sheet_added": clean_rows is not None,
                     "excel_base64": excel_base64,
                     "filename": "등기소_크롤링_결과.xlsx",
                 })
@@ -258,6 +510,15 @@ def api_saramin_run():
     collect_finance = request.form.get("collect_finance", "false").lower() == "true"
     result_columns = get_saramin_result_columns(collect_finance)
 
+    clean_saramin_enabled = request.form.get("clean_saramin_enabled", "false").lower() == "true"
+    saramin_clean_options = {
+        "company_name": request.form.get("clean_saramin_company_name", "false").lower() == "true",
+        "establish_date": request.form.get("clean_saramin_establish_date", "false").lower() == "true",
+        "employee_count": request.form.get("clean_saramin_employee_count", "false").lower() == "true",
+        "homepage": request.form.get("clean_saramin_homepage", "false").lower() == "true",
+        "money_to_million": request.form.get("clean_saramin_money_to_million", "false").lower() == "true",
+    }
+
     def ndjson(event: dict) -> str:
         return json.dumps(event, ensure_ascii=False) + "\n"
 
@@ -271,7 +532,17 @@ def api_saramin_run():
         ):
             if event.get("type") == "complete":
                 results = event.get("results", [])
-                excel_base64 = dataframe_to_excel_base64(results, columns=result_columns)
+                clean_rows = None
+                clean_columns = None
+                if clean_saramin_enabled and any(saramin_clean_options.values()):
+                    clean_rows, clean_columns = build_saramin_clean_rows(results, result_columns, saramin_clean_options)
+
+                excel_base64 = dataframe_to_excel_base64(
+                    results,
+                    columns=result_columns,
+                    clean_rows=clean_rows,
+                    clean_columns=clean_columns,
+                )
 
                 event.update({
                     "ok": True,
@@ -279,6 +550,7 @@ def api_saramin_run():
                     "total_result": len(results),
                     "columns": result_columns,
                     "collect_finance": collect_finance,
+                    "clean_sheet_added": clean_rows is not None,
                     "excel_base64": excel_base64,
                     "filename": "사람인_기업정보_크롤링_결과.xlsx",
                 })

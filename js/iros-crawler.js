@@ -229,6 +229,10 @@ function resetIros() {
   $('#iros-result-box').hide();
   $('#iros-include-closed-records').prop('checked', false);
   $('#iros-include-erased-names').prop('checked', false);
+  $('#iros-clean-enabled').prop('checked', false);
+  $('#iros-clean-split-name').prop('checked', true);
+  $('#iros-clean-remove-reg-hyphen').prop('checked', true);
+  $('#iros-clean-standardize-address').prop('checked', true);
   $('#iros-preview-table').empty();
   $('#irosResultTable').empty();
   $('#irosLogList').empty();
@@ -261,6 +265,10 @@ async function runIrosCrawler() {
   formData.append('column_index', columnIndex);
   formData.append('include_closed_records', $('#iros-include-closed-records').is(':checked') ? 'true' : 'false');
   formData.append('include_erased_names', $('#iros-include-erased-names').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_enabled', $('#iros-clean-enabled').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_split_name', $('#iros-clean-split-name').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_remove_reg_hyphen', $('#iros-clean-remove-reg-hyphen').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_standardize_address', $('#iros-clean-standardize-address').is(':checked') ? 'true' : 'false');
   formData.append('headless', 'true');
 
   resultExcelBase64 = null;
@@ -313,6 +321,7 @@ async function runIrosCrawler() {
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
         { label: '상태값', value: statusText, desc: '등기상태 · 상호말소상태 · 주말 여부' },
+        { label: '정제 시트', value: data.clean_sheet_added ? '추가됨' : '미추가' },
       ],
     }));
     renderTable('#irosResultTable', data.results || [], 200, data.columns || IROS_RESULT_COLUMNS);
