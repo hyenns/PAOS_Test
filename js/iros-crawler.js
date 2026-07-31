@@ -321,7 +321,7 @@ async function runIrosCrawler() {
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
         { label: '상태값', value: statusText, desc: '등기상태 · 상호말소상태 · 주말 여부' },
-        { label: '정제 시트', value: data.clean_sheet_added ? '추가됨' : '미추가' },
+        { label: '정제 방식', value: data.clean_sheet_added ? '시트 추가' : (data.clean_applied ? '결과 시트에 적용' : '미적용') },
       ],
     }));
     renderTable('#irosResultTable', data.results || [], 200, data.columns || IROS_RESULT_COLUMNS);

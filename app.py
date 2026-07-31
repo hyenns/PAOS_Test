@@ -437,12 +437,30 @@ def api_iros_run():
                 results = event.get("results", [])
                 clean_rows = None
                 clean_columns = None
-                if clean_iros_enabled and any(iros_clean_options.values()):
+                clean_applied = any(iros_clean_options.values())
+                clean_sheet_added = False
+                output_rows = results
+                output_columns = IROS_RESULT_COLUMNS
+                display_rows = results
+                display_columns = IROS_RESULT_COLUMNS
+
+                if clean_applied:
                     clean_rows, clean_columns = build_iros_clean_rows(results, iros_clean_options)
+                    display_rows = clean_rows
+                    display_columns = clean_columns
+                    if clean_iros_enabled:
+                        # 체크한 경우: 원본 결과 시트 + 정제결과 시트를 함께 저장합니다.
+                        clean_sheet_added = True
+                    else:
+                        # 체크하지 않은 경우: 선택한 정제를 결과 시트에 바로 적용하여 한 시트로 저장합니다.
+                        output_rows = clean_rows
+                        output_columns = clean_columns
+                        clean_rows = None
+                        clean_columns = None
 
                 excel_base64 = dataframe_to_excel_base64(
-                    results,
-                    columns=IROS_RESULT_COLUMNS,
+                    output_rows,
+                    columns=output_columns,
                     clean_rows=clean_rows,
                     clean_columns=clean_columns,
                 )
@@ -459,8 +477,10 @@ def api_iros_run():
                     "total_input": len(search_values),
                     "total_result": len(results),
                     "status_has_value": status_has_value,
-                    "columns": IROS_RESULT_COLUMNS,
-                    "clean_sheet_added": clean_rows is not None,
+                    "columns": display_columns,
+                    "results": display_rows,
+                    "clean_applied": clean_applied,
+                    "clean_sheet_added": clean_sheet_added,
                     "excel_base64": excel_base64,
                     "filename": "등기소_크롤링_결과.xlsx",
                 })
@@ -534,12 +554,30 @@ def api_saramin_run():
                 results = event.get("results", [])
                 clean_rows = None
                 clean_columns = None
-                if clean_saramin_enabled and any(saramin_clean_options.values()):
+                clean_applied = any(saramin_clean_options.values())
+                clean_sheet_added = False
+                output_rows = results
+                output_columns = result_columns
+                display_rows = results
+                display_columns = result_columns
+
+                if clean_applied:
                     clean_rows, clean_columns = build_saramin_clean_rows(results, result_columns, saramin_clean_options)
+                    display_rows = clean_rows
+                    display_columns = clean_columns
+                    if clean_saramin_enabled:
+                        # 체크한 경우: 원본 결과 시트 + 정제결과 시트를 함께 저장합니다.
+                        clean_sheet_added = True
+                    else:
+                        # 체크하지 않은 경우: 선택한 정제를 결과 시트에 바로 적용하여 한 시트로 저장합니다.
+                        output_rows = clean_rows
+                        output_columns = clean_columns
+                        clean_rows = None
+                        clean_columns = None
 
                 excel_base64 = dataframe_to_excel_base64(
-                    results,
-                    columns=result_columns,
+                    output_rows,
+                    columns=output_columns,
                     clean_rows=clean_rows,
                     clean_columns=clean_columns,
                 )
@@ -548,9 +586,11 @@ def api_saramin_run():
                     "ok": True,
                     "total_input": len(search_values),
                     "total_result": len(results),
-                    "columns": result_columns,
+                    "columns": display_columns,
+                    "results": display_rows,
                     "collect_finance": collect_finance,
-                    "clean_sheet_added": clean_rows is not None,
+                    "clean_applied": clean_applied,
+                    "clean_sheet_added": clean_sheet_added,
                     "excel_base64": excel_base64,
                     "filename": "사람인_기업정보_크롤링_결과.xlsx",
                 })

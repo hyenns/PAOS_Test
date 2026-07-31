@@ -1494,3 +1494,65 @@ button:disabled {
     border-radius: 16px;
   }
 }
+
+/* 크롤링 완료 후 정제 옵션 — 보기 좋게 카드형 정렬 */
+.crawler-clean-box {
+  padding: 16px 18px;
+}
+
+.crawler-clean-box .crawler-option-title {
+  margin-bottom: 12px;
+}
+
+.crawler-primary-check {
+  display: inline-flex;
+  padding: 8px 10px;
+  margin: 0 0 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
+.crawler-clean-help {
+  margin: 2px 0 12px !important;
+  line-height: 1.6;
+}
+
+.crawler-clean-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.crawler-clean-grid.saramin-clean-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.crawler-clean-item {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(0, 229, 160, 0.045);
+  border: 1px solid rgba(0, 229, 160, 0.12);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.crawler-clean-item span,
+.crawler-primary-check span {
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  .crawler-clean-grid,
+  .crawler-clean-grid.saramin-clean-grid {
+    grid-template-columns: 1fr;
+  }
+}

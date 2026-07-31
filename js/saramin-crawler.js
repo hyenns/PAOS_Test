@@ -385,7 +385,7 @@ async function runSaraminCrawler() {
         { label: '검색 대상', value: `${total}건` },
         { label: '수집 결과', value: `${count}건` },
         { label: '수집 항목', value: data.collect_finance ? '기업소개 · 재무정보' : '기업소개만', desc: data.collect_finance ? '상위 기업 상세정보 및 연도별 재무값' : '재무정보 관련 열 없이 기업소개 기본 열만 저장' },
-        { label: '정제 시트', value: data.clean_sheet_added ? '추가됨' : '미추가' },
+        { label: '정제 방식', value: data.clean_sheet_added ? '시트 추가' : (data.clean_applied ? '결과 시트에 적용' : '미적용') },
       ],
     }));
     renderTable('#saraminResultTable', data.results || [], 200, data.columns || getSaraminPreferredColumns(data.collect_finance));
