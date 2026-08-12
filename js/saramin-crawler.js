@@ -93,6 +93,17 @@ function sheetRows(sheetName) {
   return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 }
 
+function sheetStartColumnIndex(sheetName) {
+  const ws = saraminWorkbook.Sheets[sheetName];
+  const ref = ws && ws['!ref'];
+  if (!ref) return 0;
+  try {
+    return XLSX.utils.decode_range(ref).s.c || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 function updateSaraminCollectDesc() {
   const collectFinance = $('#saramin-collect-finance').val() === 'true';
   if (collectFinance) {
@@ -102,7 +113,7 @@ function updateSaraminCollectDesc() {
   }
 }
 
-function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders = null) {
+function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders = null, startColumnIndex = 0) {
   const $target = $(targetSelector);
   if (!rowsOrObjects || rowsOrObjects.length === 0) {
     $target.html('<div style="color: var(--muted); font-size: 0.8rem; padding: 16px;">표시할 데이터가 없습니다.</div>');
@@ -115,7 +126,7 @@ function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders
   if (Array.isArray(rowsOrObjects[0])) {
     rows = rowsOrObjects.slice(0, limit);
     const maxLen = rows.reduce((m, r) => Math.max(m, r.length), 0);
-    headers = Array.from({ length: maxLen }, (_, i) => excelColumnLetter(i));
+    headers = Array.from({ length: maxLen }, (_, i) => excelColumnLetter(startColumnIndex + i));
   } else {
     const objectKeys = Object.keys(rowsOrObjects[0]);
     const preferred = Array.isArray(preferredHeaders) ? preferredHeaders : [];
@@ -144,14 +155,16 @@ function updateSaraminColumnOptions() {
   const rows = sheetRows(sheetName);
   const firstRow = rows[0] || [];
   const maxLen = rows.reduce((m, r) => Math.max(m, r.length), 0);
+  const startCol = sheetStartColumnIndex(sheetName);
   const options = [];
 
   for (let i = 0; i < maxLen; i++) {
-    const col = excelColumnLetter(i);
+    const actualColumnIndex = startCol + i;
+    const col = excelColumnLetter(actualColumnIndex);
     const header = String(firstRow[i] ?? '').trim();
     let label = `${col}열`;
     if (headerMode === 'header' && header) label += ` - ${header}`;
-    options.push(`<option value="${i}">${escapeHtml(label)}</option>`);
+    options.push(`<option value="${actualColumnIndex}" data-row-index="${i}" data-column-letter="${escapeHtml(col)}">${escapeHtml(label)}</option>`);
   }
 
   $('#saramin-column-select').html(options.join(''));
@@ -163,16 +176,18 @@ function updateSaraminPreview() {
 
   const sheetName = $('#saramin-sheet-select').val();
   const headerMode = $('#saramin-header-mode').val();
-  const columnIndex = Number($('#saramin-column-select').val() || 0);
+  const $selectedOption = $('#saramin-column-select option:selected');
+  const rowIndex = Number($selectedOption.attr('data-row-index') || 0);
   const rows = sheetRows(sheetName);
+  const startCol = sheetStartColumnIndex(sheetName);
   const dataRows = headerMode === 'header' ? rows.slice(1) : rows;
   const selectedValues = dataRows
-    .map(r => String(r[columnIndex] ?? '').trim())
+    .map(r => String(r[rowIndex] ?? '').trim())
     .filter(v => v && v.toLowerCase() !== 'nan');
 
-  const selectedLabel = $('#saramin-column-select option:selected').text();
+  const selectedLabel = $selectedOption.text();
   $('#saramin-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
-  renderTable('#saramin-preview-table', rows, 10);
+  renderTable('#saramin-preview-table', rows, 10, null, startCol);
 }
 
 async function checkSaraminServer() {
@@ -316,6 +331,7 @@ async function runSaraminCrawler() {
   const sheetName = $('#saramin-sheet-select').val();
   const headerMode = $('#saramin-header-mode').val();
   const columnIndex = $('#saramin-column-select').val();
+  const columnLetter = $('#saramin-column-select option:selected').attr('data-column-letter') || '';
   const maxResultsPerKeyword = $('#saramin-max-results').val() || '1';
   const collectFinance = $('#saramin-collect-finance').val() === 'true';
 
@@ -324,6 +340,7 @@ async function runSaraminCrawler() {
   formData.append('sheet_name', sheetName);
   formData.append('header_mode', headerMode);
   formData.append('column_index', columnIndex);
+  formData.append('column_letter', columnLetter);
   formData.append('max_results_per_keyword', maxResultsPerKeyword);
   formData.append('collect_finance', collectFinance ? 'true' : 'false');
   formData.append('clean_saramin_enabled', $('#saramin-clean-enabled').is(':checked') ? 'true' : 'false');

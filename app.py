@@ -30,31 +30,58 @@ def excel_column_letter(index: int) -> str:
     return letters
 
 
-def read_search_values(file_bytes: bytes, sheet_name: str, header_mode: str, column_index: int) -> list[str]:
-    header = 0 if header_mode == "header" else None
-    df = pd.read_excel(
-        io.BytesIO(file_bytes),
-        sheet_name=sheet_name,
-        header=header,
-        dtype=str,
-    )
-    df = df.dropna(how="all").reset_index(drop=True)
+def read_search_values(
+    file_bytes: bytes,
+    sheet_name: str,
+    header_mode: str,
+    column_index: int,
+    column_letter: str = "",
+) -> list[str]:
+    """선택한 엑셀 열의 검색값을 읽습니다.
 
-    if df.empty or len(df.columns) == 0:
-        return []
+    프론트에서 보이는 열 문자와 실제 엑셀 열이 어긋나지 않도록,
+    가능하면 column_letter(예: AA)를 기준으로 openpyxl에서 직접 읽습니다.
+    엑셀 맨 앞에 빈 열이 있어 SheetJS 미리보기와 pandas 열 인덱스가 다르게 잡히는 경우를 방지합니다.
+    """
+    from openpyxl import load_workbook
+    from openpyxl.utils import column_index_from_string
 
-    if column_index < 0 or column_index >= len(df.columns):
-        raise ValueError("선택한 열 번호가 엑셀 범위를 벗어났습니다.")
+    wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    try:
+        ws = wb[sheet_name] if sheet_name in wb.sheetnames else wb.active
 
-    values: list[str] = []
-    for value in df.iloc[:, column_index].tolist():
-        if pd.isna(value):
-            continue
-        cleaned = str(value).strip()
-        if not cleaned or cleaned.lower() == "nan":
-            continue
-        values.append(cleaned)
-    return values
+        if column_letter:
+            column_number = column_index_from_string(str(column_letter).strip().upper())
+        else:
+            column_number = column_index + 1
+
+        if column_number < 1 or column_number > max(ws.max_column or 1, column_number):
+            raise ValueError("선택한 열 번호가 엑셀 범위를 벗어났습니다.")
+
+        start_row = 2 if header_mode == "header" else 1
+        values: list[str] = []
+
+        for row_number in range(start_row, (ws.max_row or 0) + 1):
+            # 완전히 빈 행은 건너뜁니다.
+            row_values = [
+                ws.cell(row=row_number, column=col).value
+                for col in range(1, (ws.max_column or column_number) + 1)
+            ]
+            if all(value is None or str(value).strip() == "" for value in row_values):
+                continue
+
+            value = ws.cell(row=row_number, column=column_number).value
+            if value is None:
+                continue
+
+            cleaned = str(value).strip()
+            if not cleaned or cleaned.lower() == "nan":
+                continue
+            values.append(cleaned)
+
+        return values
+    finally:
+        wb.close()
 
 
 def apply_result_excel_style(worksheet) -> None:
@@ -393,6 +420,7 @@ def api_iros_run():
 
     sheet_name = request.form.get("sheet_name", "")
     header_mode = request.form.get("header_mode", "header")
+    column_letter = request.form.get("column_letter", "").strip().upper()
 
     try:
         column_index = int(request.form.get("column_index", "0"))
@@ -401,7 +429,7 @@ def api_iros_run():
 
     try:
         file_bytes = uploaded.read()
-        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index)
+        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index, column_letter)
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
 
@@ -505,6 +533,7 @@ def api_saramin_run():
 
     sheet_name = request.form.get("sheet_name", "")
     header_mode = request.form.get("header_mode", "header")
+    column_letter = request.form.get("column_letter", "").strip().upper()
 
     try:
         column_index = int(request.form.get("column_index", "0"))
@@ -519,7 +548,7 @@ def api_saramin_run():
 
     try:
         file_bytes = uploaded.read()
-        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index)
+        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index, column_letter)
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
 
