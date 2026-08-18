@@ -330,60 +330,43 @@ def enter_iros_registration_search(driver: webdriver.Chrome, wait: WebDriverWait
     time.sleep(0.5)
 
 def normalize_registration_number(value: str) -> str:
-    """법인등록번호를 인터넷등기소 입력 형식(6자리-7자리)으로 맞춥니다."""
+    """등록번호검색 입력창 형식에 맞게 숫자 13자리만 반환합니다.
+
+    실제 등록번호검색 input은 maxlength=13 이므로 하이픈을 넣지 않습니다.
+    예: 110111-0003428 -> 1101110003428
+    """
     text = str(value or "").strip()
     digits = re.sub(r"\D", "", text)
-    if len(digits) == 13:
-        return f"{digits[:6]}-{digits[6:]}"
-    return text
+    return digits if digits else text
 
 
 def find_registration_number_input(driver: webdriver.Chrome, wait: WebDriverWait):
-    """등록번호검색 화면의 등록번호 입력창을 찾습니다."""
-    def locate(d):
-        # label의 for 속성이 연결되어 있는 경우
-        labels = d.find_elements(
-            By.XPATH,
-            "//*[self::label or self::span or self::div][contains(normalize-space(.), '등록번호')]",
-        )
-        for label in labels:
-            try:
-                if not label.is_displayed():
-                    continue
-                target_id = label.get_attribute("for")
-                if target_id:
-                    target = d.find_element(By.ID, target_id)
-                    if target.is_displayed() and target.tag_name.lower() == "input":
-                        return target
-                nearby = label.find_elements(By.XPATH, "following::input[1]")
-                if nearby and nearby[0].is_displayed():
-                    return nearby[0]
-            except Exception:
-                continue
+    """등록번호검색 화면의 법인등록번호 입력창을 찾습니다.
 
-        # 화면 안내문상 하이픈 포함 14자리 입력이므로 maxlength=14인 입력창을 우선합니다.
-        for element in d.find_elements(By.CSS_SELECTOR, "input[maxlength='14']"):
+    인터넷등기소 실제 요소 ID를 최우선으로 사용합니다.
+    """
+    input_id = "mf_wfm_potal_main_wfm_content_sbx_drokno___input"
+
+    def locate(d):
+        # 실제 등록번호검색 입력창을 ID로 직접 탐색
+        try:
+            element = d.find_element(By.ID, input_id)
+            if element.is_displayed() and element.is_enabled():
+                return element
+        except Exception:
+            pass
+
+        # ID가 변경될 경우를 대비한 fallback: maxlength=13인 보이는 입력창
+        for element in d.find_elements(By.CSS_SELECTOR, "input[maxlength='13']"):
             try:
                 if element.is_displayed() and element.is_enabled():
                     return element
             except Exception:
                 continue
 
-        # 마지막 fallback: 현재 화면의 보이는 텍스트 입력 중 폭이 가장 큰 입력창
-        candidates = []
-        for element in d.find_elements(By.CSS_SELECTOR, "input[type='text'], input:not([type])"):
-            try:
-                if element.is_displayed() and element.is_enabled():
-                    candidates.append((element.size.get("width", 0), element))
-            except Exception:
-                continue
-        if candidates:
-            candidates.sort(key=lambda item: item[0], reverse=True)
-            return candidates[0][1]
         return False
 
     return wait.until(locate)
-
 
 def find_nearest_search_button(driver: webdriver.Chrome, input_element, wait: WebDriverWait):
     """등록번호 입력창과 가장 가까운 '검색' 버튼을 찾습니다."""
@@ -415,71 +398,50 @@ def find_nearest_search_button(driver: webdriver.Chrome, input_element, wait: We
 
 
 def set_registration_number_input(driver: webdriver.Chrome, input_element, value: str) -> str:
-    """등록번호 입력값을 WebSquare 내부 상태까지 확실히 갱신합니다.
+    """같은 등록번호 입력창에 다음 13자리 번호를 넣습니다.
 
-    일반 Selenium clear()/send_keys()만 사용하면 첫 검색값이 화면/내부 모델에 남아
-    다음 검색에서도 같은 번호가 조회되는 경우가 있어 input/change 이벤트를 함께 발생시킵니다.
-    최종적으로 입력창의 실제 값을 다시 읽어 목표 번호가 들어갔는지 확인합니다.
+    화면을 다시 열지 않고 Ctrl+A -> 삭제 -> 다음 값 입력 방식으로 반복합니다.
+    Selenium 입력이 반영되지 않는 경우에만 JS 이벤트를 fallback으로 사용합니다.
     """
     target = normalize_registration_number(value)
     target_digits = re.sub(r"\D", "", target)
+    if len(target_digits) != 13:
+        raise ValueError(f"법인등록번호는 숫자 13자리여야 합니다: {value}")
 
-    for _ in range(3):
-        # 사람 입력과 비슷하게 전체 선택 후 삭제
-        try:
-            input_element.click()
-            input_element.send_keys(Keys.CONTROL, "a")
-            input_element.send_keys(Keys.BACKSPACE)
-        except Exception:
-            pass
-
-        # WebSquare/SPA 바인딩이 값을 인식하도록 native value setter + 이벤트 발생
-        try:
-            driver.execute_script(
-                """
-                const el = arguments[0];
-                const value = arguments[1];
-                el.focus();
-                const proto = Object.getPrototypeOf(el);
-                const desc = Object.getOwnPropertyDescriptor(proto, 'value')
-                    || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-                if (desc && desc.set) {
-                    desc.set.call(el, value);
-                } else {
-                    el.value = value;
-                }
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-                el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: '0' }));
-                el.blur();
-                """,
-                input_element,
-                target,
-            )
-        except Exception:
-            try:
-                input_element.clear()
-                input_element.send_keys(target)
-            except Exception:
-                pass
-
-        time.sleep(0.25)
-        try:
-            actual = input_element.get_attribute("value") or ""
-        except Exception:
-            actual = ""
-
+    # 1순위: 실제 사용자 입력과 동일하게 전체선택 -> 삭제 -> 입력
+    try:
+        input_element.click()
+        input_element.send_keys(Keys.CONTROL, "a")
+        input_element.send_keys(Keys.BACKSPACE)
+        input_element.send_keys(target_digits)
+        time.sleep(0.15)
+        actual = input_element.get_attribute("value") or ""
         if re.sub(r"\D", "", actual) == target_digits:
             return actual
+    except Exception:
+        pass
 
-        # DOM이 다시 렌더링된 경우 입력창을 재탐색해서 한 번 더 시도
-        try:
-            input_element = find_registration_number_input(driver, WebDriverWait(driver, 3))
-        except Exception:
-            pass
-
-    raise RuntimeError(f"등록번호 입력값 반영 실패: {target}")
-
+    # 2순위 fallback: WebSquare 내부 이벤트까지 갱신
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const value = arguments[1];
+        el.focus();
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.blur();
+        """,
+        input_element,
+        target_digits,
+    )
+    time.sleep(0.15)
+    actual = input_element.get_attribute("value") or ""
+    if re.sub(r"\D", "", actual) != target_digits:
+        raise RuntimeError(f"등록번호 입력값 반영 실패: {target_digits}")
+    return actual
 
 def registration_result_signature(driver: webdriver.Chrome) -> str:
     """현재 화면에 표시된 등록번호 검색 결과표의 내용 서명값을 반환합니다."""
@@ -722,48 +684,40 @@ def run_iros_crawler_events(
                     per_columns: list[str] = []
                     no_result = False
 
-                    # 첫 검색 결과가 DOM에 남아 있는 상태에서 다음 번호를 검색하면,
-                    # 기존 표를 새 결과로 오인하거나 WebSquare 내부 값이 첫 번호로 유지되는 문제가 있었습니다.
-                    # 입력값을 이벤트까지 포함해 갱신하고, 결과표 내용이 실제로 바뀔 때까지 기다립니다.
-                    for attempt in range(2):
-                        previous_signature = registration_result_signature(driver)
-                        registration_input = find_registration_number_input(driver, wait)
-                        set_registration_number_input(driver, registration_input, search_value)
+                    # 등록번호검색 화면은 최초 1회만 진입합니다.
+                    # 이후에는 동일한 실제 입력창에 다음 13자리 법인번호를 넣고 검색 버튼만 반복 클릭합니다.
+                    previous_signature = registration_result_signature(driver)
+                    registration_input = find_registration_number_input(driver, wait)
+                    set_registration_number_input(driver, registration_input, search_value)
 
-                        # 값 설정 과정에서 DOM이 다시 그려질 수 있어 버튼 탐색 직전에 입력창을 다시 잡습니다.
-                        registration_input = find_registration_number_input(driver, wait)
-                        search_button = find_nearest_search_button(driver, registration_input, wait)
-                        _click_element(driver, search_button)
+                    # 입력값이 정확히 들어갔는지 로그/검증용으로 다시 확인
+                    actual_value = registration_input.get_attribute("value") or ""
+                    if re.sub(r"\D", "", actual_value) != re.sub(r"\D", "", search_value):
+                        raise RuntimeError(f"등록번호 입력 확인 실패: {search_value}")
 
-                        # 이전 결과표가 잠깐 남아 있어도 바로 수집하지 않고 실제 갱신을 기다립니다.
-                        time.sleep(0.7)
-                        deadline = time.time() + 8.0
-                        while time.time() < deadline:
-                            body_text = driver.find_element(By.TAG_NAME, "body").text
-                            current_signature = registration_result_signature(driver)
+                    search_button = find_nearest_search_button(driver, registration_input, wait)
+                    _click_element(driver, search_button)
 
-                            # 첫 검색이거나, 기존 표와 다른 내용으로 갱신된 경우에만 결과를 확정합니다.
-                            if current_signature and (not previous_signature or current_signature != previous_signature):
-                                per_rows, per_columns = extract_registration_search_results(driver, company)
-                                if per_rows:
-                                    break
+                    # 검색 결과 갱신 대기. 화면을 다시 열지는 않습니다.
+                    time.sleep(0.5)
+                    deadline = time.time() + 8.0
+                    while time.time() < deadline:
+                        body_text = driver.find_element(By.TAG_NAME, "body").text
+                        current_signature = registration_result_signature(driver)
 
-                            if any(text in body_text for text in ["검색결과가 없습니다", "조회된 결과가 없습니다", "검색 결과가 없습니다"]):
-                                no_result = True
+                        if current_signature and (not previous_signature or current_signature != previous_signature):
+                            per_rows, per_columns = extract_registration_search_results(driver, company)
+                            if per_rows:
                                 break
 
-                            time.sleep(0.35)
-
-                        if per_rows or no_result:
+                        if any(text in body_text for text in ["검색결과가 없습니다", "조회된 결과가 없습니다", "검색 결과가 없습니다"]):
+                            no_result = True
                             break
 
-                        if attempt == 0:
-                            yield log(f"↻ [{current_no}/{total}] 결과 갱신이 확인되지 않아 검색 화면을 새로 열고 재시도합니다.")
-                            enter_iros_registration_search(driver, wait)
-                            time.sleep(0.4)
+                        time.sleep(0.25)
 
                     if not per_rows:
-                        status_text = "검색결과 없음" if no_result else "검색 결과 갱신 실패"
+                        status_text = "검색결과 없음" if no_result else "검색 결과 갱신 확인 실패"
                         yield log(f"⏭️ [{current_no}/{total}] {company} — {status_text}")
                         yield make_event("progress", current=current_no, total=total, result_count=len(results))
                         continue
