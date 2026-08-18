@@ -30,45 +30,74 @@ export function initMerge() {
   });
 
   $input.on('change', function () {
-    if (this.files && this.files.length) loadMergeFiles([...this.files]);
+    if (this.files && this.files.length) {
+      loadMergeFiles([...this.files]);
+      // 같은 파일을 다시 선택할 수 있도록 input 값을 비웁니다.
+      this.value = '';
+    }
   });
 }
 
 // ── 파일 로드 ─────────────────────────────────────────────────────────────────
 function loadMergeFiles(files) {
   const excelFiles = files.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name));
-  if (excelFiles.length < 2) {
-    alert('병합하려면 엑셀/CSV 파일을 2개 이상 업로드해주세요.');
+  if (!excelFiles.length) {
+    alert('엑셀/CSV 파일을 선택해주세요.');
     return;
   }
 
-  mergeFilesData     = [];
+  // 이미 올린 파일은 유지하고 새로 선택한 파일만 뒤에 추가합니다.
+  // 같은 이름/크기/수정시간의 파일을 다시 선택한 경우에는 중복 추가하지 않습니다.
+  const existingKeys = new Set(mergeFilesData.map(f => f.fileKey).filter(Boolean));
+  const newFiles = excelFiles.filter(file => {
+    const key = getMergeFileKey(file);
+    return !existingKeys.has(key);
+  });
+
+  if (!newFiles.length) {
+    alert('이미 추가된 파일입니다. 다른 파일을 선택해주세요.');
+    return;
+  }
+
+  // 파일 구성이 바뀌면 이전 병합 결과는 무효화합니다.
   mergeResultData    = null;
   mergeResultHeaders = [];
+  $('#merge-result-box').hide();
 
-  Promise.all(excelFiles.map(readMergeFile))
+  Promise.all(newFiles.map(readMergeFile))
     .then(results => {
-      mergeFilesData = results.filter(Boolean);
+      const validResults = results.filter(Boolean);
+      if (!validResults.length) {
+        alert('정상적으로 읽힌 파일이 없습니다.');
+        return;
+      }
+
+      mergeFilesData.push(...validResults);
+
+      const $zone = $('#mergeUploadZone');
+      $zone.css({ borderColor: 'var(--accent)', background: 'rgba(0,229,160,0.04)' });
+      $zone.find('h3').text(`✅ ${mergeFilesData.length}개 파일 선택됨`);
+
+      renderMergeFileList();
+      $('#merge-settings').show();
+
+      // 첫 파일만 올린 상태에서는 병합 기준 열을 만들지 않고 추가 업로드를 안내합니다.
       if (mergeFilesData.length < 2) {
-        alert('정상적으로 읽힌 파일이 2개 미만입니다.');
+        $('#merge-key-select').empty();
+        $zone.find('p').text('파일을 1개 이상 더 추가하려면 다시 클릭하거나 드래그해주세요.');
         return;
       }
 
       const common = getCommonHeaders(mergeFilesData.map(f => f.headers));
       if (!common.length) {
-        alert('모든 파일에 공통으로 존재하는 열이 없습니다. 열 이름을 확인해주세요.');
+        $('#merge-key-select').empty();
+        $zone.find('p').text('공통 열이 없습니다. 병합할 파일의 열 이름을 확인해주세요.');
+        alert('현재 추가된 파일 전체에 공통으로 존재하는 열이 없습니다. 열 이름을 확인해주세요.');
         return;
       }
 
-      const $zone = $('#mergeUploadZone');
-      $zone.css({ borderColor: 'var(--accent)', background: 'rgba(0,229,160,0.04)' });
-      $zone.find('h3').text(`✅ ${mergeFilesData.length}개 파일 업로드 완료`);
-      $zone.find('p').text(`공통 열 ${common.length}개 확인됨`);
-
-      renderMergeFileList();
+      $zone.find('p').text(`공통 열 ${common.length}개 확인됨 · 파일을 더 추가하려면 다시 클릭하세요.`);
       populateMergeKeySelect(common);
-      $('#merge-settings').show();
-      $('#merge-result-box').hide();
     })
     .catch(err => {
       console.error(err);
@@ -112,7 +141,13 @@ function readMergeFile(file) {
             return obj;
           });
 
-        resolve({ name: file.name, baseName: getBaseFileName(file.name), headers: fileHeaders, rows });
+        resolve({
+          name: file.name,
+          baseName: getBaseFileName(file.name),
+          fileKey: getMergeFileKey(file),
+          headers: fileHeaders,
+          rows,
+        });
       } catch (err) {
         reject(err);
       }
@@ -250,6 +285,11 @@ export function resetMerge() {
 }
 
 // ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
+
+function getMergeFileKey(file) {
+  return `${file.name}::${file.size}::${file.lastModified}`;
+}
+
 function getBaseFileName(name) {
   return String(name).replace(/\.[^.]+$/, '').replace(/[^가-힣a-zA-Z0-9_\-]+/g, '_');
 }
