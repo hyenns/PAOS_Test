@@ -427,9 +427,15 @@ def _dedupe_headers(headers: list[str], count: int) -> list[str]:
 
 
 def extract_registration_search_results(driver: webdriver.Chrome, original_value: str) -> tuple[list[dict], list[str]]:
-    """등록번호 검색 후 화면에 표시된 결과 표의 모든 열을 동적으로 수집합니다."""
+    """등록번호 검색 후 '법인상호 선택' 결과표의 실제 데이터 행만 수집합니다.
+
+    인터넷등기소 결과표는 반응형 화면용 머리글을 td 한 칸짜리 행으로도 렌더링합니다.
+    기존 로직은 이 행들까지 데이터로 읽어 '관할등기소', '법인구분' 등이 결과 행으로
+    저장되는 문제가 있었습니다. 실제 결과 행과 동일한 셀 수를 가진 행만 남기고,
+    UI 선택용 '선택' 열은 결과 엑셀에서 제외합니다.
+    """
     best = None
-    keyword_tokens = ["상호", "법인", "등록번호", "본점", "등기", "관할", "상태"]
+    keyword_tokens = ["상호", "법인", "등록번호", "본점", "등기", "관할", "주말", "폐쇄"]
 
     for table in driver.find_elements(By.TAG_NAME, "table"):
         try:
@@ -437,18 +443,31 @@ def extract_registration_search_results(driver: webdriver.Chrome, original_value
                 continue
 
             tr_elements = table.find_elements(By.XPATH, ".//tr")
-            data_rows = []
+            row_candidates: list[list[str]] = []
             max_cells = 0
+
             for tr in tr_elements:
                 tds = tr.find_elements(By.XPATH, "./td")
                 if not tds:
                     continue
-                values = [re.sub(r"\s+", " ", (td.text or td.get_attribute("textContent") or "")).strip() for td in tds]
-                if any(values):
-                    data_rows.append(values)
-                    max_cells = max(max_cells, len(values))
 
-            if not data_rows or max_cells == 0:
+                values = [
+                    re.sub(r"\s+", " ", (td.text or td.get_attribute("textContent") or "")).strip()
+                    for td in tds
+                ]
+                if not any(values):
+                    continue
+
+                row_candidates.append(values)
+                max_cells = max(max_cells, len(values))
+
+            if not row_candidates or max_cells < 2:
+                continue
+
+            # 반응형 머리글은 보통 td가 1개인 별도 행으로 반복됩니다.
+            # 실제 결과 행은 결과표의 최대 셀 수와 동일하므로 그 행만 남깁니다.
+            data_rows = [values for values in row_candidates if len(values) == max_cells]
+            if not data_rows:
                 continue
 
             header_elements = table.find_elements(By.XPATH, ".//thead//th")
@@ -460,12 +479,21 @@ def extract_registration_search_results(driver: webdriver.Chrome, original_value
             ]
             headers = _dedupe_headers(raw_headers, max_cells)
 
+            # 일부 화면에서는 머리글 자체가 전체 폭 td 행으로 한 번 더 렌더링될 수 있어 제거합니다.
+            normalized_headers = [normalize_iros_header(h) for h in headers]
+            filtered_rows: list[list[str]] = []
+            for values in data_rows:
+                normalized_values = [normalize_iros_header(v) for v in values]
+                if normalized_values == normalized_headers:
+                    continue
+                filtered_rows.append(values)
+            data_rows = filtered_rows
+            if not data_rows:
+                continue
+
             table_text = re.sub(r"\s+", " ", table.text or "")
             score = sum(3 for token in keyword_tokens if token in " ".join(headers))
             score += sum(1 for token in keyword_tokens if token in table_text)
-            digits = re.sub(r"\D", "", normalize_registration_number(original_value))
-            if digits and digits in re.sub(r"\D", "", table_text):
-                score += 8
             score += min(len(data_rows), 5)
 
             candidate = (score, headers, data_rows)
@@ -478,14 +506,23 @@ def extract_registration_search_results(driver: webdriver.Chrome, original_value
         return [], []
 
     _, headers, data_rows = best
+
+    # '선택'은 라디오 버튼용 UI 열이므로 수집 결과에서는 제외합니다.
+    keep_indices = [
+        idx for idx, header in enumerate(headers)
+        if normalize_iros_header(header) not in {"선택"}
+    ]
+    clean_headers = [headers[idx] for idx in keep_indices]
+
     results: list[dict] = []
     for values in data_rows:
         padded = values + [""] * (len(headers) - len(values))
-        row = {header: padded[idx] for idx, header in enumerate(headers)}
+        clean_values = [padded[idx] for idx in keep_indices]
+        row = {header: clean_values[idx] for idx, header in enumerate(clean_headers)}
         row = {"검색값": original_value, **row}
         results.append(row)
 
-    return results, ["검색값", *headers]
+    return results, ["검색값", *clean_headers]
 
 def normalize_iros_header(value: str) -> str:
     """표 머리글 비교를 위해 공백과 줄바꿈을 제거합니다."""

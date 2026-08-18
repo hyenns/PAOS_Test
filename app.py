@@ -36,6 +36,7 @@ def read_search_values(
     header_mode: str,
     column_index: int,
     column_letter: str = "",
+    search_mode: str = "company",
 ) -> list[str]:
     """선택한 엑셀 열의 검색값을 읽습니다.
 
@@ -58,7 +59,20 @@ def read_search_values(
         if column_number < 1 or column_number > max(ws.max_column or 1, column_number):
             raise ValueError("선택한 열 번호가 엑셀 범위를 벗어났습니다.")
 
-        start_row = 2 if header_mode == "header" else 1
+        # 등록번호검색에서는 제목으로 지정했더라도 선택 열의 첫 셀이 실제 13자리
+        # 법인등록번호이면 데이터 파일로 판단해 첫 행도 포함합니다.
+        # 예: 별도 헤더 없이 A1부터 1101110003428 형태로 입력된 테스트/업무 파일.
+        first_cell_value = ws.cell(row=1, column=column_number).value
+        first_cell_digits = re.sub(r"\D", "", str(first_cell_value or ""))
+        first_row_is_registration_data = (
+            search_mode == "registration" and len(first_cell_digits) == 13
+        )
+
+        if header_mode == "header" and not first_row_is_registration_data:
+            start_row = 2
+        else:
+            start_row = 1
+
         values: list[str] = []
 
         for row_number in range(start_row, (ws.max_row or 0) + 1):
@@ -449,7 +463,14 @@ def api_iros_run():
 
     try:
         file_bytes = uploaded.read()
-        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index, column_letter)
+        search_values = read_search_values(
+            file_bytes,
+            sheet_name,
+            header_mode,
+            column_index,
+            column_letter,
+            search_mode=search_mode,
+        )
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
 
@@ -578,7 +599,14 @@ def api_saramin_run():
 
     try:
         file_bytes = uploaded.read()
-        search_values = read_search_values(file_bytes, sheet_name, header_mode, column_index, column_letter)
+        search_values = read_search_values(
+            file_bytes,
+            sheet_name,
+            header_mode,
+            column_index,
+            column_letter,
+            search_mode=search_mode,
+        )
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
 

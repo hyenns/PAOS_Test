@@ -88,6 +88,11 @@ function sheetStartColumnIndex(sheetName) {
   }
 }
 
+function looksLikeRegistrationNumber(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return digits.length === 13;
+}
+
 function renderTable(targetSelector, rowsOrObjects, limit = 10, preferredHeaders = null, startColumnIndex = 0) {
   const $target = $(targetSelector);
   if (!rowsOrObjects || rowsOrObjects.length === 0) {
@@ -155,14 +160,23 @@ function updatePreview() {
   const rowIndex = Number($selectedOption.attr('data-row-index') || 0);
   const rows = sheetRows(sheetName);
   const startCol = sheetStartColumnIndex(sheetName);
-  const dataRows = headerMode === 'header' ? rows.slice(1) : rows;
+  const isRegistration = getIrosSearchMode() === 'registration';
+  const firstSelectedValue = rows.length ? String(rows[0][rowIndex] ?? '').trim() : '';
+  const includeFirstRowAsRegistrationData =
+    isRegistration && headerMode === 'header' && looksLikeRegistrationNumber(firstSelectedValue);
+  const dataRows =
+    headerMode === 'header' && !includeFirstRowAsRegistrationData ? rows.slice(1) : rows;
+
   const selectedValues = dataRows
     .map(r => String(r[rowIndex] ?? '').trim())
     .filter(v => v && v.toLowerCase() !== 'nan');
 
   const selectedLabel = $selectedOption.text();
-  const modeLabel = getIrosSearchMode() === 'registration' ? '법인등록번호' : '회사명';
-  $('#iros-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 ${modeLabel} 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
+  const modeLabel = isRegistration ? '법인등록번호' : '회사명';
+  const autoHeaderNote = includeFirstRowAsRegistrationData
+    ? ' <span style="color: var(--muted);">첫 셀이 13자리 법인등록번호라 첫 행도 데이터로 포함했습니다.</span>'
+    : '';
+  $('#iros-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 ${modeLabel} 항목을 불러왔습니다.${autoHeaderNote} 아래는 원본 미리보기입니다.`);
   renderTable('#iros-preview-table', rows, 10, null, startCol);
 }
 
