@@ -502,17 +502,31 @@
 
           <section class="crawler-panel" id="iros-panel" style="display: none">
             <div class="panel-title">IROS Crawler</div>
-            <div class="panel-subtitle">인터넷등기소 상호검색</div>
-            <div class="panel-desc">
-              인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.
+            <div class="panel-subtitle" id="iros-panel-subtitle">인터넷등기소 법인 검색</div>
+            <div class="panel-desc" id="iros-panel-desc">
+              상호 또는 법인등록번호를 기준으로 인터넷등기소 법인정보를 수집합니다.
             </div>
 
             <div class="crawler-alert" id="iros-server-status">서버 상태 확인 중...</div>
 
+            <div class="crawler-form-row iros-search-mode-row">
+              <div class="crawler-field">
+                <label>검색 방식</label>
+                <select id="iros-search-mode">
+                  <option value="company">상호검색</option>
+                  <option value="registration">등록번호검색</option>
+                </select>
+              </div>
+              <div class="crawler-field crawler-field-wide">
+                <label>검색 방식 안내</label>
+                <div class="crawler-mode-help" id="iros-search-mode-help">회사명이 들어있는 열을 선택해 상호검색을 진행합니다.</div>
+              </div>
+            </div>
+
             <label class="upload-zone" for="irosFileInput" id="irosUploadZone">
               <div class="up-icon">📂</div>
-              <h3>회사명이 들어있는 엑셀 파일을 업로드하세요</h3>
-              <p>.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능</p>
+              <h3 id="iros-upload-title">회사명이 들어있는 엑셀 파일을 업로드하세요</h3>
+              <p id="iros-upload-desc">.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능</p>
               <input type="file" id="irosFileInput" accept=".xlsx,.xls" style="display: none" />
             </label>
 
@@ -536,8 +550,8 @@
                 </div>
               </div>
 
-              <div class="crawler-option-box">
-                <div class="crawler-option-title">검색 옵션</div>
+              <div class="crawler-option-box" id="iros-company-search-options">
+                <div class="crawler-option-title">상호검색 옵션</div>
                 <label class="crawler-check">
                   <input type="checkbox" id="iros-include-closed-records" />
                   <span>폐쇄등기기록 포함</span>

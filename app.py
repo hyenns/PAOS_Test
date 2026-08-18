@@ -307,33 +307,50 @@ def parse_korean_money_to_million(value: object) -> str:
     return format_million_integer_without_rounding(total)
 
 
-def build_iros_clean_rows(rows: list[dict], options: dict[str, bool]) -> tuple[list[dict], list[str]]:
+def build_iros_clean_rows(
+    rows: list[dict],
+    options: dict[str, bool],
+    columns: list[str] | None = None,
+) -> tuple[list[dict], list[str]]:
+    """등기소 결과를 회사 형식으로 정제합니다.
+
+    상호검색은 기존 고정 열을 사용하고, 등록번호검색은 인터넷등기소 결과표의
+    실제 열 이름을 그대로 가져오므로 columns를 기준으로 동적으로 정제합니다.
+    """
     split_name = options.get("split_name", False)
     remove_reg_hyphen = options.get("remove_reg_hyphen", False)
     standardize_address = options.get("standardize_address", False)
+    source_columns = list(columns or IROS_RESULT_COLUMNS)
+
+    name_columns = {"상호(명칭)", "상호", "법인명", "상호명"}
+    reg_columns = {"법인등록번호", "등록번호", "법인번호"}
+    address_columns = {"본점소재지", "본점", "본점주소", "소재지"}
 
     clean_columns: list[str] = []
-    for column in IROS_RESULT_COLUMNS:
-        if column == "상호(명칭)" and split_name:
+    for column in source_columns:
+        if column in name_columns and split_name:
             clean_columns.extend(["상호_국문", "상호_영문"])
         else:
             clean_columns.append(column)
 
+    # 중복된 정제 열 이름이 생기는 경우 한 번만 유지
+    clean_columns = list(dict.fromkeys(clean_columns))
+
     clean_rows: list[dict] = []
     for row in rows:
         clean_row: dict = {}
-        for column in IROS_RESULT_COLUMNS:
+        for column in source_columns:
             value = row.get(column, "")
 
-            if column == "상호(명칭)" and split_name:
+            if column in name_columns and split_name:
                 korean_name, english_name = split_korean_english_name(value)
                 clean_row["상호_국문"] = korean_name
                 clean_row["상호_영문"] = english_name
                 continue
 
-            if column == "법인등록번호" and remove_reg_hyphen:
+            if column in reg_columns and remove_reg_hyphen:
                 value = clean_text_value(value).replace("-", "")
-            elif column == "본점소재지" and standardize_address:
+            elif column in address_columns and standardize_address:
                 value = standardize_province_in_address(value)
 
             clean_row[column] = value
@@ -421,6 +438,9 @@ def api_iros_run():
     sheet_name = request.form.get("sheet_name", "")
     header_mode = request.form.get("header_mode", "header")
     column_letter = request.form.get("column_letter", "").strip().upper()
+    search_mode = request.form.get("search_mode", "company").strip().lower()
+    if search_mode not in {"company", "registration"}:
+        return jsonify({"ok": False, "message": "검색 방식이 올바르지 않습니다."}), 400
 
     try:
         column_index = int(request.form.get("column_index", "0"))
@@ -434,7 +454,8 @@ def api_iros_run():
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
 
     if not search_values:
-        return jsonify({"ok": False, "message": "선택한 열에 크롤링할 회사명이 없습니다."}), 400
+        target_name = "법인등록번호" if search_mode == "registration" else "회사명"
+        return jsonify({"ok": False, "message": f"선택한 열에 크롤링할 {target_name}이 없습니다."}), 400
 
     include_closed_records = request.form.get("include_closed_records", "false").lower() == "true"
     include_erased_names = request.form.get("include_erased_names", "false").lower() == "true"
@@ -457,6 +478,7 @@ def api_iros_run():
     def generate():
         for event in run_iros_crawler_events(
             search_values,
+            search_mode=search_mode,
             include_closed_records=include_closed_records,
             include_erased_names=include_erased_names,
             headless=headless,
@@ -467,13 +489,16 @@ def api_iros_run():
                 clean_columns = None
                 clean_applied = any(iros_clean_options.values())
                 clean_sheet_added = False
+                crawler_columns = event.get("columns") or IROS_RESULT_COLUMNS
                 output_rows = results
-                output_columns = IROS_RESULT_COLUMNS
+                output_columns = crawler_columns
                 display_rows = results
-                display_columns = IROS_RESULT_COLUMNS
+                display_columns = crawler_columns
 
                 if clean_applied:
-                    clean_rows, clean_columns = build_iros_clean_rows(results, iros_clean_options)
+                    clean_rows, clean_columns = build_iros_clean_rows(
+                        results, iros_clean_options, crawler_columns
+                    )
                     display_rows = clean_rows
                     display_columns = clean_columns
                     if clean_iros_enabled:
@@ -502,6 +527,7 @@ def api_iros_run():
 
                 event.update({
                     "ok": True,
+                    "search_mode": search_mode,
                     "total_input": len(search_values),
                     "total_result": len(results),
                     "status_has_value": status_has_value,
@@ -510,7 +536,11 @@ def api_iros_run():
                     "clean_applied": clean_applied,
                     "clean_sheet_added": clean_sheet_added,
                     "excel_base64": excel_base64,
-                    "filename": "등기소_크롤링_결과.xlsx",
+                    "filename": (
+                        "등기소_등록번호검색_결과.xlsx"
+                        if search_mode == "registration"
+                        else "등기소_상호검색_결과.xlsx"
+                    ),
                 })
 
             yield ndjson(event)

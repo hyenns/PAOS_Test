@@ -6,6 +6,40 @@ let selectedFile = null;
 let resultExcelBase64 = null;
 let resultFilename = '등기소_크롤링_결과.xlsx';
 
+function getIrosSearchMode() {
+  return $('#iros-search-mode').val() === 'registration' ? 'registration' : 'company';
+}
+
+function updateIrosSearchModeUI() {
+  const mode = getIrosSearchMode();
+  const isRegistration = mode === 'registration';
+
+  $('#iros-panel-subtitle').text(isRegistration ? '인터넷등기소 등록번호검색' : '인터넷등기소 상호검색');
+  $('#iros-panel-desc').text(
+    isRegistration
+      ? '법인등록번호를 기준으로 등기사항증명서 등록번호검색 결과의 법인정보를 수집합니다.'
+      : '인터넷등기소 상호검색 결과 중 * 표시된 법인정보와 상태값을 수집합니다.'
+  );
+  $('#iros-search-mode-help').text(
+    isRegistration
+      ? '법인등록번호가 들어있는 열을 선택하면 열람·발급 > 법인 > 등록번호검색 경로로 조회합니다.'
+      : '회사명이 들어있는 열을 선택하면 기존 상호검색 방식으로 조회합니다.'
+  );
+  $('#iros-upload-title').text(
+    isRegistration ? '법인등록번호가 들어있는 엑셀 파일을 업로드하세요' : '회사명이 들어있는 엑셀 파일을 업로드하세요'
+  );
+  $('#iros-upload-desc').text(
+    isRegistration
+      ? '.xlsx · .xls 파일 가능 / 법인등록번호 13자리 또는 하이픈 포함 형식 지원'
+      : '.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능'
+  );
+  $('#iros-company-search-options').toggle(!isRegistration);
+
+  if (workbook) {
+    updatePreview();
+  }
+}
+
 const IROS_RESULT_COLUMNS = [
   '검색값',
   '법인종류',
@@ -126,7 +160,8 @@ function updatePreview() {
     .filter(v => v && v.toLowerCase() !== 'nan');
 
   const selectedLabel = $selectedOption.text();
-  $('#iros-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
+  const modeLabel = getIrosSearchMode() === 'registration' ? '법인등록번호' : '회사명';
+  $('#iros-preview-info').html(`✅ <strong>${escapeHtml(selectedLabel)}</strong> 기준으로 총 <strong>${selectedValues.length}</strong>개 ${modeLabel} 항목을 불러왔습니다. 아래는 원본 미리보기입니다.`);
   renderTable('#iros-preview-table', rows, 10, null, startCol);
 }
 
@@ -242,6 +277,7 @@ function resetIros() {
   $('#irosFileInput').val('');
   $('#iros-settings').hide();
   $('#iros-result-box').hide();
+  $('#iros-search-mode').val('company');
   $('#iros-include-closed-records').prop('checked', false);
   $('#iros-include-erased-names').prop('checked', false);
   $('#iros-clean-enabled').prop('checked', false);
@@ -252,6 +288,7 @@ function resetIros() {
   $('#irosResultTable').empty();
   $('#irosLogList').empty();
   $('#irosStatsRow').empty();
+  updateIrosSearchModeUI();
 }
 
 async function handleFile(file) {
@@ -273,6 +310,7 @@ async function runIrosCrawler() {
   const headerMode = $('#iros-header-mode').val();
   const columnIndex = $('#iros-column-select').val();
   const columnLetter = $('#iros-column-select option:selected').attr('data-column-letter') || '';
+  const searchMode = getIrosSearchMode();
 
   const formData = new FormData();
   formData.append('file', selectedFile);
@@ -280,8 +318,9 @@ async function runIrosCrawler() {
   formData.append('header_mode', headerMode);
   formData.append('column_index', columnIndex);
   formData.append('column_letter', columnLetter);
-  formData.append('include_closed_records', $('#iros-include-closed-records').is(':checked') ? 'true' : 'false');
-  formData.append('include_erased_names', $('#iros-include-erased-names').is(':checked') ? 'true' : 'false');
+  formData.append('search_mode', searchMode);
+  formData.append('include_closed_records', searchMode === 'company' && $('#iros-include-closed-records').is(':checked') ? 'true' : 'false');
+  formData.append('include_erased_names', searchMode === 'company' && $('#iros-include-erased-names').is(':checked') ? 'true' : 'false');
   formData.append('clean_iros_enabled', $('#iros-clean-enabled').is(':checked') ? 'true' : 'false');
   formData.append('clean_iros_split_name', $('#iros-clean-split-name').is(':checked') ? 'true' : 'false');
   formData.append('clean_iros_remove_reg_hyphen', $('#iros-clean-remove-reg-hyphen').is(':checked') ? 'true' : 'false');
@@ -299,10 +338,10 @@ async function runIrosCrawler() {
     badgeType: 'progress',
     items: [
       { label: '처리 상태', value: '등기소 접속 준비' },
-      { label: '검색 방식', value: '엑셀 기준 열 검색' },
+      { label: '검색 방식', value: searchMode === 'registration' ? '등록번호검색' : '상호검색' },
     ],
   }));
-  appendIrosLog('인터넷등기소 접속 및 검색을 시작합니다.');
+  appendIrosLog(`인터넷등기소 ${searchMode === 'registration' ? '등록번호검색' : '상호검색'}을 시작합니다.`);
 
   try {
     const res = await fetch('/api/iros/run', { method: 'POST', body: formData });
@@ -329,17 +368,23 @@ async function runIrosCrawler() {
 
     const total = data.total_input ?? 0;
     const count = data.total_result ?? 0;
+    const completedMode = data.search_mode === 'registration' ? '등록번호검색' : '상호검색';
     const statusText = data.status_has_value ? '상태값 수집됨' : '상태값 없음/미노출';
+    const badgeText = data.search_mode === 'registration' ? completedMode : statusText;
+    const summaryItems = [
+      { label: '검색 대상', value: `${total}건` },
+      { label: '수집 결과', value: `${count}건` },
+      { label: '검색 방식', value: completedMode },
+      { label: '정제 방식', value: data.clean_sheet_added ? '시트 추가' : (data.clean_applied ? '결과 시트에 적용' : '미적용') },
+    ];
+    if (data.search_mode !== 'registration') {
+      summaryItems.splice(2, 0, { label: '상태값', value: statusText, desc: '등기상태 · 상호말소상태 · 주말 여부' });
+    }
     $('#irosStatsRow').html(renderIrosSummary({
       title: '크롤링 완료',
-      badge: statusText,
-      badgeType: data.status_has_value ? 'success' : 'warning',
-      items: [
-        { label: '검색 대상', value: `${total}건` },
-        { label: '수집 결과', value: `${count}건` },
-        { label: '상태값', value: statusText, desc: '등기상태 · 상호말소상태 · 주말 여부' },
-        { label: '정제 방식', value: data.clean_sheet_added ? '시트 추가' : (data.clean_applied ? '결과 시트에 적용' : '미적용') },
-      ],
+      badge: badgeText,
+      badgeType: data.search_mode === 'registration' ? 'success' : (data.status_has_value ? 'success' : 'warning'),
+      items: summaryItems,
     }));
     renderTable('#irosResultTable', data.results || [], 200, data.columns || IROS_RESULT_COLUMNS);
   } catch (e) {
@@ -392,6 +437,7 @@ export function initIrosCrawler() {
     if (file) await handleFile(file);
   });
 
+  $('#iros-search-mode').on('change', updateIrosSearchModeUI);
   $('#iros-sheet-select').on('change', updateColumnOptions);
   $('#iros-header-mode').on('change', updateColumnOptions);
   $('#iros-column-select').on('change', updatePreview);
@@ -411,4 +457,6 @@ export function initIrosCrawler() {
     const file = e.originalEvent.dataTransfer.files?.[0];
     if (file) await handleFile(file);
   });
+
+  updateIrosSearchModeUI();
 }

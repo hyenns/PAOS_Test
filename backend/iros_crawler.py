@@ -138,6 +138,256 @@ def enter_iros_business_search(
     )
 
 
+
+def _visible_exact_text_elements(driver: webdriver.Chrome, text: str):
+    xpath = (
+        "//*[self::a or self::button or self::span or self::div]"
+        f"[normalize-space(.)='{text}']"
+    )
+    elements = []
+    for element in driver.find_elements(By.XPATH, xpath):
+        try:
+            if element.is_displayed():
+                elements.append(element)
+        except Exception:
+            continue
+    return elements
+
+
+def _click_element(driver: webdriver.Chrome, element) -> None:
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+    except Exception:
+        pass
+    try:
+        driver.execute_script("arguments[0].click();", element)
+    except Exception:
+        element.click()
+
+
+def enter_iros_registration_search(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
+    """열람·발급 > 법인 > 열람·발급 > 등록번호검색 화면으로 진입합니다.
+
+    인터넷등기소 화면의 ID가 바뀌어도 최대한 동작하도록 메뉴 텍스트와 화면 위치를
+    함께 사용합니다.
+    """
+    driver.get(IROS_URL)
+
+    # 1) 상단 '열람·발급' 메뉴
+    top_menu = wait.until(lambda d: (_visible_exact_text_elements(d, "열람·발급") or [None])[0])
+    ActionChains(driver).move_to_element(top_menu).perform()
+    _click_element(driver, top_menu)
+    time.sleep(1.5)
+
+    # 2) 펼쳐진 메뉴의 '법인' 영역에서 '열람·발급' 선택
+    corp_headings = _visible_exact_text_elements(driver, "법인")
+    corp_heading = corp_headings[0] if corp_headings else None
+    submenu_candidates = _visible_exact_text_elements(driver, "열람·발급")
+
+    corp_issue_link = None
+    if corp_heading:
+        try:
+            hx = corp_heading.location.get("x", 0)
+            hy = corp_heading.location.get("y", 0)
+            ranked = []
+            for candidate in submenu_candidates:
+                if candidate == top_menu:
+                    continue
+                try:
+                    cx = candidate.location.get("x", 0)
+                    cy = candidate.location.get("y", 0)
+                    # 법인 제목 아래쪽이면서 같은 열에 가까운 링크를 우선합니다.
+                    if cy >= hy - 10:
+                        distance = abs(cx - hx) + abs(cy - hy) * 0.35
+                        ranked.append((distance, candidate))
+                except Exception:
+                    continue
+            if ranked:
+                ranked.sort(key=lambda item: item[0])
+                corp_issue_link = ranked[0][1]
+        except Exception:
+            pass
+
+    if corp_issue_link is None:
+        # 위치 기반 탐색 실패 시 상단 메뉴를 제외한 다음 보이는 열람·발급 링크를 사용합니다.
+        others = [el for el in submenu_candidates if el != top_menu]
+        if others:
+            corp_issue_link = others[0]
+
+    if corp_issue_link is None:
+        raise TimeoutException("법인 열람·발급 메뉴를 찾지 못했습니다.")
+
+    _click_element(driver, corp_issue_link)
+
+    # 신청 화면 로딩 대기
+    wait.until(lambda d: "법인 등기사항증명서" in d.find_element(By.TAG_NAME, "body").text)
+    time.sleep(0.8)
+
+    # 3) 등록번호검색 탭
+    tab = wait.until(lambda d: (_visible_exact_text_elements(d, "등록번호검색") or [None])[0])
+    _click_element(driver, tab)
+    time.sleep(0.8)
+
+
+def normalize_registration_number(value: str) -> str:
+    """법인등록번호를 인터넷등기소 입력 형식(6자리-7자리)으로 맞춥니다."""
+    text = str(value or "").strip()
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 13:
+        return f"{digits[:6]}-{digits[6:]}"
+    return text
+
+
+def find_registration_number_input(driver: webdriver.Chrome, wait: WebDriverWait):
+    """등록번호검색 화면의 등록번호 입력창을 찾습니다."""
+    def locate(d):
+        # label의 for 속성이 연결되어 있는 경우
+        labels = d.find_elements(
+            By.XPATH,
+            "//*[self::label or self::span or self::div][contains(normalize-space(.), '등록번호')]",
+        )
+        for label in labels:
+            try:
+                if not label.is_displayed():
+                    continue
+                target_id = label.get_attribute("for")
+                if target_id:
+                    target = d.find_element(By.ID, target_id)
+                    if target.is_displayed() and target.tag_name.lower() == "input":
+                        return target
+                nearby = label.find_elements(By.XPATH, "following::input[1]")
+                if nearby and nearby[0].is_displayed():
+                    return nearby[0]
+            except Exception:
+                continue
+
+        # 화면 안내문상 하이픈 포함 14자리 입력이므로 maxlength=14인 입력창을 우선합니다.
+        for element in d.find_elements(By.CSS_SELECTOR, "input[maxlength='14']"):
+            try:
+                if element.is_displayed() and element.is_enabled():
+                    return element
+            except Exception:
+                continue
+
+        # 마지막 fallback: 현재 화면의 보이는 텍스트 입력 중 폭이 가장 큰 입력창
+        candidates = []
+        for element in d.find_elements(By.CSS_SELECTOR, "input[type='text'], input:not([type])"):
+            try:
+                if element.is_displayed() and element.is_enabled():
+                    candidates.append((element.size.get("width", 0), element))
+            except Exception:
+                continue
+        if candidates:
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            return candidates[0][1]
+        return False
+
+    return wait.until(locate)
+
+
+def find_nearest_search_button(driver: webdriver.Chrome, input_element, wait: WebDriverWait):
+    """등록번호 입력창과 가장 가까운 '검색' 버튼을 찾습니다."""
+    def locate(d):
+        candidates = []
+        xpath = "//*[self::button or self::a or @role='button'][normalize-space(.)='검색']"
+        try:
+            ix = input_element.location.get("x", 0)
+            iy = input_element.location.get("y", 0)
+        except Exception:
+            ix, iy = 0, 0
+
+        for element in d.find_elements(By.XPATH, xpath):
+            try:
+                if not element.is_displayed() or not element.is_enabled():
+                    continue
+                ex = element.location.get("x", 0)
+                ey = element.location.get("y", 0)
+                distance = abs(ex - ix) + abs(ey - iy) * 2
+                candidates.append((distance, element))
+            except Exception:
+                continue
+        if candidates:
+            candidates.sort(key=lambda item: item[0])
+            return candidates[0][1]
+        return False
+
+    return wait.until(locate)
+
+
+def _dedupe_headers(headers: list[str], count: int) -> list[str]:
+    output: list[str] = []
+    seen: dict[str, int] = {}
+    for idx in range(count):
+        base = re.sub(r"\s+", " ", str(headers[idx] if idx < len(headers) else "")).strip()
+        if not base:
+            base = f"열{idx + 1}"
+        seen[base] = seen.get(base, 0) + 1
+        name = base if seen[base] == 1 else f"{base}_{seen[base]}"
+        output.append(name)
+    return output
+
+
+def extract_registration_search_results(driver: webdriver.Chrome, original_value: str) -> tuple[list[dict], list[str]]:
+    """등록번호 검색 후 화면에 표시된 결과 표의 모든 열을 동적으로 수집합니다."""
+    best = None
+    keyword_tokens = ["상호", "법인", "등록번호", "본점", "등기", "관할", "상태"]
+
+    for table in driver.find_elements(By.TAG_NAME, "table"):
+        try:
+            if not table.is_displayed():
+                continue
+
+            tr_elements = table.find_elements(By.XPATH, ".//tr")
+            data_rows = []
+            max_cells = 0
+            for tr in tr_elements:
+                tds = tr.find_elements(By.XPATH, "./td")
+                if not tds:
+                    continue
+                values = [re.sub(r"\s+", " ", (td.text or td.get_attribute("textContent") or "")).strip() for td in tds]
+                if any(values):
+                    data_rows.append(values)
+                    max_cells = max(max_cells, len(values))
+
+            if not data_rows or max_cells == 0:
+                continue
+
+            header_elements = table.find_elements(By.XPATH, ".//thead//th")
+            if not header_elements:
+                header_elements = table.find_elements(By.XPATH, ".//tr[1]/th")
+            raw_headers = [
+                re.sub(r"\s+", " ", (h.text or h.get_attribute("textContent") or "")).strip()
+                for h in header_elements
+            ]
+            headers = _dedupe_headers(raw_headers, max_cells)
+
+            table_text = re.sub(r"\s+", " ", table.text or "")
+            score = sum(3 for token in keyword_tokens if token in " ".join(headers))
+            score += sum(1 for token in keyword_tokens if token in table_text)
+            digits = re.sub(r"\D", "", normalize_registration_number(original_value))
+            if digits and digits in re.sub(r"\D", "", table_text):
+                score += 8
+            score += min(len(data_rows), 5)
+
+            candidate = (score, headers, data_rows)
+            if best is None or candidate[0] > best[0]:
+                best = candidate
+        except Exception:
+            continue
+
+    if best is None:
+        return [], []
+
+    _, headers, data_rows = best
+    results: list[dict] = []
+    for values in data_rows:
+        padded = values + [""] * (len(headers) - len(values))
+        row = {header: padded[idx] for idx, header in enumerate(headers)}
+        row = {"검색값": original_value, **row}
+        results.append(row)
+
+    return results, ["검색값", *headers]
+
 def normalize_iros_header(value: str) -> str:
     """표 머리글 비교를 위해 공백과 줄바꿈을 제거합니다."""
     return re.sub(r"\s+", "", str(value or "")).strip()
@@ -176,52 +426,106 @@ def get_iros_cell_text(row_element, header_map: dict[str, int], header_name: str
 def run_iros_crawler_events(
     company_inputs: Iterable[str],
     *,
+    search_mode: str = "company",
     include_closed_records: bool = False,
     include_erased_names: bool = False,
     headless: bool = True,
 ) -> Iterator[dict[str, Any]]:
-    """등기소 크롤링을 실행하면서 진행 로그를 실시간 이벤트로 반환합니다."""
+    """등기소 크롤링을 실행하면서 진행 로그를 실시간 이벤트로 반환합니다.
+
+    search_mode:
+      - company: 기존 상호검색
+      - registration: 열람·발급 > 법인 > 등록번호검색
+    """
     company_inputs = [str(v).strip() for v in company_inputs if str(v).strip()]
     results: list[dict] = []
     logs: list[str] = []
     total = len(company_inputs)
+    search_mode = "registration" if search_mode == "registration" else "company"
+    result_columns: list[str] = IROS_RESULT_COLUMNS.copy()
 
     def log(message: str) -> dict[str, Any]:
         logs.append(message)
         return make_event("log", message=message, logs=logs.copy())
 
+    def merge_columns(columns: list[str]) -> None:
+        nonlocal result_columns
+        if search_mode == "registration" and result_columns == IROS_RESULT_COLUMNS:
+            result_columns = []
+        for column in columns:
+            if column not in result_columns:
+                result_columns.append(column)
+
     driver = None
     try:
         yield log("🌐 인터넷등기소 접속 중...")
+        yield log(f"검색 방식: {'등록번호검색' if search_mode == 'registration' else '상호검색'}")
 
-        yield log(
-            "검색 옵션: "
-            f"폐쇄등기기록 포함={'ON' if include_closed_records else 'OFF'}, "
-            f"주말된 상호(명칭) 포함={'ON' if include_erased_names else 'OFF'}"
-        )
+        if search_mode == "company":
+            yield log(
+                "검색 옵션: "
+                f"폐쇄등기기록 포함={'ON' if include_closed_records else 'OFF'}, "
+                f"주말된 상호(명칭) 포함={'ON' if include_erased_names else 'OFF'}"
+            )
 
         driver = get_driver(headless=headless)
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 12)
 
-        enter_iros_business_search(
-            driver,
-            wait,
-            include_closed_records=include_closed_records,
-            include_erased_names=include_erased_names,
-        )
-        yield log("✅ 인터넷등기소 상호검색 화면 진입 완료")
-
-        search_box = wait.until(
-            EC.presence_of_element_located(
-                (By.ID, "mf_wfm_potal_main_wfm_content_sbx_conm_name_swrd___input")
+        if search_mode == "registration":
+            enter_iros_registration_search(driver, wait)
+            yield log("✅ 인터넷등기소 등록번호검색 화면 진입 완료")
+        else:
+            enter_iros_business_search(
+                driver,
+                wait,
+                include_closed_records=include_closed_records,
+                include_erased_names=include_erased_names,
             )
-        )
+            yield log("✅ 인터넷등기소 상호검색 화면 진입 완료")
+            search_box = wait.until(
+                EC.presence_of_element_located(
+                    (By.ID, "mf_wfm_potal_main_wfm_content_sbx_conm_name_swrd___input")
+                )
+            )
 
         for idx, company in enumerate(company_inputs):
             current_no = idx + 1
             try:
                 yield log(f"🔎 [{current_no}/{total}] {company} 검색 중...")
 
+                if search_mode == "registration":
+                    search_value = normalize_registration_number(company)
+                    registration_input = find_registration_number_input(driver, wait)
+                    registration_input.clear()
+                    registration_input.send_keys(search_value)
+                    search_button = find_nearest_search_button(driver, registration_input, wait)
+                    _click_element(driver, search_button)
+
+                    # 검색 결과가 동적으로 갱신되는 시간을 짧게 기다린 뒤 결과 표를 탐색합니다.
+                    time.sleep(1.5)
+                    per_rows: list[dict] = []
+                    per_columns: list[str] = []
+                    for _ in range(10):
+                        per_rows, per_columns = extract_registration_search_results(driver, company)
+                        if per_rows:
+                            break
+                        body_text = driver.find_element(By.TAG_NAME, "body").text
+                        if any(text in body_text for text in ["검색결과가 없습니다", "조회된 결과가 없습니다", "검색 결과가 없습니다"]):
+                            break
+                        time.sleep(0.5)
+
+                    if not per_rows:
+                        yield log(f"⏭️ [{current_no}/{total}] {company} — 검색결과 없음")
+                        yield make_event("progress", current=current_no, total=total, result_count=len(results))
+                        continue
+
+                    merge_columns(per_columns)
+                    results.extend(per_rows)
+                    yield log(f"✅ [{current_no}/{total}] {company} — {len(per_rows)}건")
+                    yield make_event("progress", current=current_no, total=total, result_count=len(results))
+                    continue
+
+                # 기존 상호검색 로직
                 search_box.clear()
                 search_box.send_keys(company)
 
@@ -235,7 +539,6 @@ def run_iros_crawler_events(
                 driver.execute_script("arguments[0].click();", search_button)
                 time.sleep(2)
 
-                # 팝업 처리
                 try:
                     popup_button = WebDriverWait(driver, 1).until(
                         EC.presence_of_element_located(
@@ -263,9 +566,7 @@ def run_iros_crawler_events(
                 count = 0
                 for row in rows:
                     try:
-                        # 머리글명으로 열 위치를 찾고, 실패하면 현재 화면 기준 순번을 사용합니다.
                         header_map = get_iros_header_map(row)
-
                         corp_type = get_iros_cell_text(row, header_map, "법인종류", 3)
                         company_name = get_iros_cell_text(row, header_map, "상호(명칭)", 4)
                         corp_reg_num = get_iros_cell_text(row, header_map, "법인등록번호", 5)
@@ -300,10 +601,10 @@ def run_iros_crawler_events(
                 yield log(f"❌ [{current_no}/{total}] {company} — 조회 시간 초과")
                 yield make_event("progress", current=current_no, total=total, result_count=len(results))
             except Exception as e:
-                yield log(f"❌ [{current_no}/{total}] {company} — 조회 실패: {str(e)[:80]}")
+                yield log(f"❌ [{current_no}/{total}] {company} — 조회 실패: {str(e)[:100]}")
                 yield make_event("progress", current=current_no, total=total, result_count=len(results))
 
-        if results:
+        if search_mode == "company" and results:
             status_has_value = any(
                 str(row.get(col, "")).strip()
                 for row in results
@@ -312,8 +613,17 @@ def run_iros_crawler_events(
             if not status_has_value:
                 yield log("⚠️ 상태값 열은 생성됐지만 값이 비어 있습니다. 인터넷등기소 결과표의 상태 열 위치가 변경됐을 수 있습니다.")
 
+        if search_mode == "registration" and not result_columns:
+            result_columns = ["검색값"]
+
         yield log("🎉 크롤링 완료")
-        yield make_event("complete", results=results, logs=logs.copy())
+        yield make_event(
+            "complete",
+            results=results,
+            columns=result_columns,
+            search_mode=search_mode,
+            logs=logs.copy(),
+        )
 
     except Exception as e:
         yield make_event("error", message=f"등기소 크롤링 실패: {str(e)}", logs=logs.copy())
@@ -325,6 +635,7 @@ def run_iros_crawler_events(
 def run_iros_crawler(
     company_inputs: Iterable[str],
     *,
+    search_mode: str = "company",
     include_closed_records: bool = False,
     include_erased_names: bool = False,
     headless: bool = True,
@@ -334,6 +645,7 @@ def run_iros_crawler(
     final_logs: list[str] = []
     for event in run_iros_crawler_events(
         company_inputs,
+        search_mode=search_mode,
         include_closed_records=include_closed_records,
         include_erased_names=include_erased_names,
         headless=headless,

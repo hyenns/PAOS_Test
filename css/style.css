@@ -1556,3 +1556,34 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* 등기소 검색 방식 선택 */
+.iros-search-mode-row {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  align-items: stretch;
+}
+
+.iros-search-mode-row .crawler-field:first-child {
+  min-width: 220px;
+}
+
+.crawler-field-wide {
+  flex: 1 1 360px;
+}
+
+.crawler-mode-help {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
