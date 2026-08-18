@@ -34,6 +34,7 @@ function updateIrosSearchModeUI() {
       : '.xlsx · .xls 파일 가능 / 첫 행 제목 여부 선택 가능'
   );
   $('#iros-company-search-options').toggle(!isRegistration);
+  $('#iros-clean-options').toggle(!isRegistration);
 
   if (workbook) {
     updatePreview();
@@ -311,6 +312,7 @@ async function runIrosCrawler() {
   const columnIndex = $('#iros-column-select').val();
   const columnLetter = $('#iros-column-select option:selected').attr('data-column-letter') || '';
   const searchMode = getIrosSearchMode();
+  const isRegistration = searchMode === 'registration';
 
   const formData = new FormData();
   formData.append('file', selectedFile);
@@ -321,10 +323,10 @@ async function runIrosCrawler() {
   formData.append('search_mode', searchMode);
   formData.append('include_closed_records', searchMode === 'company' && $('#iros-include-closed-records').is(':checked') ? 'true' : 'false');
   formData.append('include_erased_names', searchMode === 'company' && $('#iros-include-erased-names').is(':checked') ? 'true' : 'false');
-  formData.append('clean_iros_enabled', $('#iros-clean-enabled').is(':checked') ? 'true' : 'false');
-  formData.append('clean_iros_split_name', $('#iros-clean-split-name').is(':checked') ? 'true' : 'false');
-  formData.append('clean_iros_remove_reg_hyphen', $('#iros-clean-remove-reg-hyphen').is(':checked') ? 'true' : 'false');
-  formData.append('clean_iros_standardize_address', $('#iros-clean-standardize-address').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_enabled', !isRegistration && $('#iros-clean-enabled').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_split_name', !isRegistration && $('#iros-clean-split-name').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_remove_reg_hyphen', !isRegistration && $('#iros-clean-remove-reg-hyphen').is(':checked') ? 'true' : 'false');
+  formData.append('clean_iros_standardize_address', !isRegistration && $('#iros-clean-standardize-address').is(':checked') ? 'true' : 'false');
   formData.append('headless', 'true');
 
   resultExcelBase64 = null;

@@ -165,69 +165,168 @@ def _click_element(driver: webdriver.Chrome, element) -> None:
         element.click()
 
 
+def _hover_element(driver: webdriver.Chrome, element) -> None:
+    """메가메뉴가 hover 이벤트로 열리는 경우를 위해 mouseover/mouseenter를 함께 발생시킵니다."""
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+    except Exception:
+        pass
+
+    try:
+        ActionChains(driver).move_to_element(element).pause(0.3).perform()
+    except Exception:
+        pass
+
+    try:
+        driver.execute_script(
+            """
+            ['mouseover', 'mouseenter'].forEach(function(type) {
+                arguments[0].dispatchEvent(new MouseEvent(type, {bubbles: true, view: window}));
+            });
+            """,
+            element,
+        )
+    except Exception:
+        pass
+
+
+def _wait_visible_exact_text(driver: webdriver.Chrome, text: str, timeout: int = 12):
+    """화면에 실제로 보이는 동일 텍스트 요소가 나타날 때까지 기다립니다."""
+    try:
+        return WebDriverWait(driver, timeout).until(
+            lambda d: (_visible_exact_text_elements(d, text) or [False])[0]
+        )
+    except TimeoutException as exc:
+        raise TimeoutException(f"'{text}' 요소를 찾지 못했습니다.") from exc
+
+def _wait_top_navigation_text(driver: webdriver.Chrome, text: str, timeout: int = 15):
+    """같은 문구가 여러 곳에 있을 때 화면 상단의 네비게이션 요소를 우선합니다."""
+    def locate(d):
+        candidates = _visible_exact_text_elements(d, text)
+        if not candidates:
+            return False
+        ranked = []
+        for element in candidates:
+            try:
+                y = element.location.get("y", 99999)
+                x = element.location.get("x", 99999)
+                ranked.append((y, x, element))
+            except Exception:
+                continue
+        if not ranked:
+            return False
+        ranked.sort(key=lambda item: (item[0], item[1]))
+        return ranked[0][2]
+
+    try:
+        return WebDriverWait(driver, timeout).until(locate)
+    except TimeoutException as exc:
+        raise TimeoutException(f"상단 '{text}' 메뉴를 찾지 못했습니다.") from exc
+
+
+def _find_corporation_issue_link(driver: webdriver.Chrome, corp_heading, top_menu):
+    """메가메뉴의 '법인' 열 안에 있는 '열람·발급' 링크를 우선해서 찾습니다."""
+    # 1순위: '법인' 제목의 가장 가까운 부모 영역 안에서 열람·발급 링크 탐색
+    try:
+        container = corp_heading.find_element(
+            By.XPATH,
+            "ancestor::*[self::li or self::div or self::section][.//*[self::a or self::button][normalize-space(.)='열람·발급']][1]",
+        )
+        links = container.find_elements(
+            By.XPATH,
+            ".//*[self::a or self::button][normalize-space(.)='열람·발급']",
+        )
+        for link in links:
+            try:
+                if link.is_displayed() and link.is_enabled() and link != top_menu:
+                    return link
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 2순위: 법인 제목과 화면 좌표가 가장 가까운 열람·발급 요소
+    submenu_candidates = _visible_exact_text_elements(driver, "열람·발급")
+    try:
+        hx = corp_heading.location.get("x", 0)
+        hy = corp_heading.location.get("y", 0)
+        ranked = []
+        for candidate in submenu_candidates:
+            if candidate == top_menu:
+                continue
+            try:
+                cx = candidate.location.get("x", 0)
+                cy = candidate.location.get("y", 0)
+                if cy >= hy - 15:
+                    distance = abs(cx - hx) + abs(cy - hy) * 0.35
+                    ranked.append((distance, candidate))
+            except Exception:
+                continue
+        if ranked:
+            ranked.sort(key=lambda item: item[0])
+            return ranked[0][1]
+    except Exception:
+        pass
+
+    return None
+
+
 def enter_iros_registration_search(driver: webdriver.Chrome, wait: WebDriverWait) -> None:
     """열람·발급 > 법인 > 열람·발급 > 등록번호검색 화면으로 진입합니다.
 
-    인터넷등기소 화면의 ID가 바뀌어도 최대한 동작하도록 메뉴 텍스트와 화면 위치를
-    함께 사용합니다.
+    상단 메뉴는 클릭이 아니라 hover로 메가메뉴가 열리는 구조라 먼저 hover를 발생시키고,
+    그 안의 법인 열에 있는 '열람·발급' 링크를 찾아 클릭합니다.
     """
     driver.get(IROS_URL)
 
-    # 1) 상단 '열람·발급' 메뉴
-    top_menu = wait.until(lambda d: (_visible_exact_text_elements(d, "열람·발급") or [None])[0])
-    ActionChains(driver).move_to_element(top_menu).perform()
-    _click_element(driver, top_menu)
-    time.sleep(1.5)
+    # 1) 상단 '열람·발급' 메뉴: 클릭하면 메가메뉴가 닫히거나 다른 화면으로 이동할 수 있으므로 hover 우선
+    try:
+        top_menu = _wait_top_navigation_text(driver, "열람·발급", timeout=15)
+        _hover_element(driver, top_menu)
 
-    # 2) 펼쳐진 메뉴의 '법인' 영역에서 '열람·발급' 선택
-    corp_headings = _visible_exact_text_elements(driver, "법인")
-    corp_heading = corp_headings[0] if corp_headings else None
-    submenu_candidates = _visible_exact_text_elements(driver, "열람·발급")
-
-    corp_issue_link = None
-    if corp_heading:
+        # 메가메뉴가 실제로 펼쳐질 때까지 '법인' 제목을 기다립니다.
         try:
-            hx = corp_heading.location.get("x", 0)
-            hy = corp_heading.location.get("y", 0)
-            ranked = []
-            for candidate in submenu_candidates:
-                if candidate == top_menu:
-                    continue
-                try:
-                    cx = candidate.location.get("x", 0)
-                    cy = candidate.location.get("y", 0)
-                    # 법인 제목 아래쪽이면서 같은 열에 가까운 링크를 우선합니다.
-                    if cy >= hy - 10:
-                        distance = abs(cx - hx) + abs(cy - hy) * 0.35
-                        ranked.append((distance, candidate))
-                except Exception:
-                    continue
-            if ranked:
-                ranked.sort(key=lambda item: item[0])
-                corp_issue_link = ranked[0][1]
-        except Exception:
-            pass
+            corp_heading = WebDriverWait(driver, 5).until(
+                lambda d: (_visible_exact_text_elements(d, "법인") or [False])[0]
+            )
+        except TimeoutException:
+            # hover 이벤트가 브라우저 환경에 따라 먹지 않을 때 한 번만 클릭 fallback
+            _click_element(driver, top_menu)
+            time.sleep(0.8)
+            corp_heading = _wait_visible_exact_text(driver, "법인", timeout=6)
+    except TimeoutException as exc:
+        raise TimeoutException("상단 '열람·발급' 메뉴 또는 법인 메뉴를 열지 못했습니다.") from exc
 
+    # 2) 펼쳐진 메가메뉴의 '법인' 열에서 '열람·발급' 선택
+    corp_issue_link = _find_corporation_issue_link(driver, corp_heading, top_menu)
     if corp_issue_link is None:
-        # 위치 기반 탐색 실패 시 상단 메뉴를 제외한 다음 보이는 열람·발급 링크를 사용합니다.
-        others = [el for el in submenu_candidates if el != top_menu]
-        if others:
-            corp_issue_link = others[0]
+        raise TimeoutException("법인 메뉴의 '열람·발급' 항목을 찾지 못했습니다.")
 
-    if corp_issue_link is None:
-        raise TimeoutException("법인 열람·발급 메뉴를 찾지 못했습니다.")
-
-    _click_element(driver, corp_issue_link)
+    try:
+        _click_element(driver, corp_issue_link)
+    except Exception as exc:
+        raise RuntimeError("법인 '열람·발급' 메뉴 클릭에 실패했습니다.") from exc
 
     # 신청 화면 로딩 대기
-    wait.until(lambda d: "법인 등기사항증명서" in d.find_element(By.TAG_NAME, "body").text)
-    time.sleep(0.8)
+    try:
+        WebDriverWait(driver, 15).until(
+            lambda d: "법인 등기사항증명서" in d.find_element(By.TAG_NAME, "body").text
+        )
+    except TimeoutException as exc:
+        raise TimeoutException("법인 등기사항증명서 열람·발급 신청 화면으로 이동하지 못했습니다.") from exc
 
     # 3) 등록번호검색 탭
-    tab = wait.until(lambda d: (_visible_exact_text_elements(d, "등록번호검색") or [None])[0])
-    _click_element(driver, tab)
-    time.sleep(0.8)
+    try:
+        tab = _wait_visible_exact_text(driver, "등록번호검색", timeout=10)
+        _click_element(driver, tab)
+        find_registration_number_input(driver, WebDriverWait(driver, 8))
+    except TimeoutException as exc:
+        raise TimeoutException("등록번호검색 탭 또는 등록번호 입력창을 찾지 못했습니다.") from exc
+    except Exception:
+        # 입력창 확인 과정에서 일시적인 WebDriver 예외가 나도 탭 클릭까지 성공했다면 이후 검색 단계에서 재탐색합니다.
+        pass
 
+    time.sleep(0.5)
 
 def normalize_registration_number(value: str) -> str:
     """법인등록번호를 인터넷등기소 입력 형식(6자리-7자리)으로 맞춥니다."""
