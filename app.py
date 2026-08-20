@@ -604,7 +604,6 @@ def api_saramin_run():
             header_mode,
             column_index,
             column_letter,
-            search_mode=search_mode,
         )
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
