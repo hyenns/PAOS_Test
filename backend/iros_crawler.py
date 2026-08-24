@@ -606,6 +606,94 @@ def get_iros_cell_text(row_element, header_map: dict[str, int], header_name: str
         return ""
 
 
+def normalize_company_match_text(value: str) -> str:
+    """상호검색 결과와 검색값 비교용 문자열을 만듭니다.
+
+    공백/기호 차이 때문에 같은 회사가 불일치로 처리되지 않도록 한글, 영문, 숫자만 남깁니다.
+    """
+    return re.sub(r"[^0-9A-Za-z가-힣]", "", str(value or "")).lower()
+
+
+def company_name_matches_search(search_value: str, company_name: str) -> bool:
+    """현재 검색어와 실제 상호가 서로 포함 관계인지 확인합니다.
+
+    예: 국보 ↔ 국보(KUKBO CO.,LTD.), 에티버스 ↔ 주식회사에티버스
+    """
+    search_norm = normalize_company_match_text(search_value)
+    company_norm = normalize_company_match_text(company_name)
+    if not search_norm or not company_norm:
+        return False
+    return search_norm in company_norm or company_norm in search_norm
+
+
+def set_company_search_input(driver: webdriver.Chrome, search_box, value: str) -> None:
+    """상호검색 입력값을 확실히 교체하고 실제 반영 여부까지 확인합니다."""
+    target = str(value or "").strip()
+
+    try:
+        search_box.click()
+        search_box.send_keys(Keys.CONTROL, "a")
+        search_box.send_keys(Keys.BACKSPACE)
+        search_box.send_keys(target)
+        time.sleep(0.1)
+        actual = search_box.get_attribute("value") or ""
+        if normalize_company_match_text(actual) == normalize_company_match_text(target):
+            return
+    except Exception:
+        pass
+
+    # WebSquare 입력값이 Selenium clear/send_keys만으로 갱신되지 않는 경우 대비
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const value = arguments[1];
+        el.focus();
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        """,
+        search_box,
+        target,
+    )
+    time.sleep(0.1)
+    actual = search_box.get_attribute("value") or ""
+    if normalize_company_match_text(actual) != normalize_company_match_text(target):
+        raise RuntimeError(f"상호검색 입력값 반영 실패: {target}")
+
+
+def get_visible_company_search_rows(driver: webdriver.Chrome, search_value: str):
+    """현재 화면에 실제로 보이는 상호검색 결과 중 검색값과 맞는 행만 반환합니다.
+
+    인터넷등기소(WebSquare)는 이전 검색 결과 DOM을 숨긴 채 남겨두는 경우가 있습니다.
+    전체 DOM의 '*' 행을 그대로 읽으면 이전 검색 결과가 다음 검색값에 섞일 수 있으므로,
+    보이는 행 + 현재 검색어와 상호가 일치하는 행만 수집합니다.
+    """
+    candidates = driver.find_elements(
+        By.XPATH,
+        "//td[@data-col_id='no']/span[text()='*']/parent::td/parent::tr",
+    )
+
+    visible_rows = []
+    for row in candidates:
+        try:
+            if not row.is_displayed():
+                continue
+            table = row.find_element(By.XPATH, "./ancestor::table[1]")
+            if not table.is_displayed():
+                continue
+
+            header_map = get_iros_header_map(row)
+            company_name = get_iros_cell_text(row, header_map, "상호(명칭)", 4)
+            if company_name_matches_search(search_value, company_name):
+                visible_rows.append(row)
+        except Exception:
+            continue
+
+    return visible_rows
+
+
 def run_iros_crawler_events(
     company_inputs: Iterable[str],
     *,
@@ -728,9 +816,10 @@ def run_iros_crawler_events(
                     yield make_event("progress", current=current_no, total=total, result_count=len(results))
                     continue
 
-                # 기존 상호검색 로직
-                search_box.clear()
-                search_box.send_keys(company)
+                # 상호검색 로직
+                # WebSquare가 이전 검색 결과 DOM을 숨겨둔 채 유지할 수 있어
+                # 입력값을 확실히 교체하고, 현재 화면에 보이며 현재 검색어와 맞는 결과만 수집합니다.
+                set_company_search_input(driver, search_box, company)
 
                 search_button = wait.until(
                     EC.element_to_be_clickable(
@@ -738,28 +827,40 @@ def run_iros_crawler_events(
                     )
                 )
                 driver.execute_script("arguments[0].scrollIntoView(true);", search_button)
-                time.sleep(1)
                 driver.execute_script("arguments[0].click();", search_button)
-                time.sleep(2)
 
-                try:
-                    popup_button = WebDriverWait(driver, 1).until(
-                        EC.presence_of_element_located(
-                            (
-                                By.XPATH,
-                                "//a[contains(text(), '확인') and contains(@class, 'btn solid medium color-main')]",
+                # 현재 검색값에 해당하는 '보이는' 결과가 나타날 때까지 짧게 기다립니다.
+                # 이전 검색의 숨겨진 행은 절대 사용하지 않습니다.
+                rows = []
+                deadline = time.time() + 6.0
+                while time.time() < deadline:
+                    try:
+                        popup_button = WebDriverWait(driver, 0.3).until(
+                            EC.presence_of_element_located(
+                                (
+                                    By.XPATH,
+                                    "//a[contains(text(), '확인') and contains(@class, 'btn solid medium color-main')]",
+                                )
                             )
                         )
-                    )
-                    driver.execute_script("arguments[0].click();", popup_button)
-                    time.sleep(1)
-                except Exception:
-                    pass
+                        if popup_button.is_displayed():
+                            driver.execute_script("arguments[0].click();", popup_button)
+                    except Exception:
+                        pass
 
-                rows = driver.find_elements(
-                    By.XPATH,
-                    "//td[@data-col_id='no']/span[text()='*']/parent::td/parent::tr",
-                )
+                    rows = get_visible_company_search_rows(driver, company)
+                    if rows:
+                        break
+
+                    body_text = driver.find_element(By.TAG_NAME, "body").text
+                    if any(text in body_text for text in [
+                        "검색결과가 없습니다",
+                        "조회된 결과가 없습니다",
+                        "검색 결과가 없습니다",
+                    ]):
+                        break
+
+                    time.sleep(0.25)
 
                 if not rows:
                     yield log(f"⏭️ [{current_no}/{total}] {company} — 유효 데이터 없음")
