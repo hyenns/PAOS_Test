@@ -664,34 +664,126 @@ def set_company_search_input(driver: webdriver.Chrome, search_box, value: str) -
 
 
 def get_visible_company_search_rows(driver: webdriver.Chrome, search_value: str):
-    """현재 화면에 실제로 보이는 상호검색 결과 중 검색값과 맞는 행만 반환합니다.
+    """현재 검색값과 상호가 맞는 상호검색 결과행을 반환합니다.
 
-    인터넷등기소(WebSquare)는 이전 검색 결과 DOM을 숨긴 채 남겨두는 경우가 있습니다.
-    전체 DOM의 '*' 행을 그대로 읽으면 이전 검색 결과가 다음 검색값에 섞일 수 있으므로,
-    보이는 행 + 현재 검색어와 상호가 일치하는 행만 수집합니다.
+    WebSquare는 이전 검색 결과 DOM을 숨겨둔 채 남기거나, 새 결과행을 렌더링하는 순간
+    Selenium의 is_displayed()가 False로 잡히는 경우가 있습니다. 따라서 표시 여부만으로
+    결과를 버리지 않고, 실제 상호(명칭)가 현재 검색값과 맞는지를 최종 기준으로 사용합니다.
+
+    기존 '*' 표시 행을 우선 사용하되, '*' 표시가 없는 정상 결과도 놓치지 않도록
+    같은 결과표의 전체 행을 fallback으로 함께 확인합니다.
     """
-    candidates = driver.find_elements(
-        By.XPATH,
-        "//td[@data-col_id='no']/span[text()='*']/parent::td/parent::tr",
-    )
+    candidate_xpaths = [
+        "//td[@data-col_id='no']/span[normalize-space(text())='*']/parent::td/parent::tr",
+        "//td[@data-col_id='no']/parent::tr",
+    ]
 
-    visible_rows = []
+    candidates = []
+    seen_ids = set()
+    for xpath in candidate_xpaths:
+        for row in driver.find_elements(By.XPATH, xpath):
+            try:
+                row_id = getattr(row, "id", None) or str(id(row))
+                if row_id in seen_ids:
+                    continue
+                seen_ids.add(row_id)
+                candidates.append(row)
+            except Exception:
+                continue
+
+    matched_rows = []
+    seen_keys = set()
     for row in candidates:
         try:
-            if not row.is_displayed():
-                continue
-            table = row.find_element(By.XPATH, "./ancestor::table[1]")
-            if not table.is_displayed():
-                continue
-
             header_map = get_iros_header_map(row)
             company_name = get_iros_cell_text(row, header_map, "상호(명칭)", 4)
-            if company_name_matches_search(search_value, company_name):
-                visible_rows.append(row)
+            if not company_name_matches_search(search_value, company_name):
+                continue
+
+            corp_reg_num = get_iros_cell_text(row, header_map, "법인등록번호", 5)
+            company_address = get_iros_cell_text(row, header_map, "본점소재지", 6)
+            dedupe_key = (
+                normalize_company_match_text(company_name),
+                re.sub(r"\D", "", corp_reg_num),
+                normalize_company_match_text(company_address),
+            )
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            matched_rows.append(row)
         except Exception:
             continue
 
-    return visible_rows
+    return matched_rows
+
+
+def _close_company_search_popup_if_present(driver: webdriver.Chrome) -> None:
+    """상호검색 중 표시되는 확인 팝업이 있으면 닫습니다."""
+    try:
+        popup_buttons = driver.find_elements(
+            By.XPATH,
+            "//a[contains(text(), '확인') and contains(@class, 'btn solid medium color-main')]",
+        )
+        for popup_button in popup_buttons:
+            try:
+                if popup_button.is_displayed():
+                    driver.execute_script("arguments[0].click();", popup_button)
+                    time.sleep(0.1)
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def _visible_company_no_result_message(driver: webdriver.Chrome) -> bool:
+    """현재 화면에 실제로 보이는 '검색결과 없음' 메시지가 있는지 확인합니다."""
+    messages = [
+        "검색결과가 없습니다",
+        "조회된 결과가 없습니다",
+        "검색 결과가 없습니다",
+    ]
+    for message in messages:
+        try:
+            elements = driver.find_elements(
+                By.XPATH,
+                f"//*[contains(normalize-space(.), '{message}')]",
+            )
+            for element in elements:
+                try:
+                    if element.is_displayed():
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    return False
+
+
+def wait_for_company_search_rows(
+    driver: webdriver.Chrome,
+    search_value: str,
+    timeout: float,
+) -> tuple[list, bool]:
+    """현재 검색어 결과를 짧은 간격으로 확인합니다.
+
+    결과가 나타나면 timeout을 다 채우지 않고 즉시 반환합니다.
+    반환값 두 번째 값은 '검색결과 없음' 메시지가 실제로 확인됐는지 여부입니다.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        _close_company_search_popup_if_present(driver)
+
+        rows = get_visible_company_search_rows(driver, search_value)
+        if rows:
+            return rows, False
+
+        if _visible_company_no_result_message(driver):
+            return [], True
+
+        time.sleep(0.2)
+
+    return [], False
 
 
 def run_iros_crawler_events(
@@ -817,8 +909,9 @@ def run_iros_crawler_events(
                     continue
 
                 # 상호검색 로직
-                # WebSquare가 이전 검색 결과 DOM을 숨겨둔 채 유지할 수 있어
-                # 입력값을 확실히 교체하고, 현재 화면에 보이며 현재 검색어와 맞는 결과만 수집합니다.
+                # 1차 검색은 최대 5초까지만 확인하되 결과가 뜨는 즉시 다음 단계로 넘어갑니다.
+                # 정상 데이터인데 화면 갱신이 늦은 경우에는 같은 검색어로 1회만 재검색하고
+                # 추가 최대 4초 동안 확인합니다.
                 set_company_search_input(driver, search_box, company)
 
                 search_button = wait.until(
@@ -829,41 +922,32 @@ def run_iros_crawler_events(
                 driver.execute_script("arguments[0].scrollIntoView(true);", search_button)
                 driver.execute_script("arguments[0].click();", search_button)
 
-                # 현재 검색값에 해당하는 '보이는' 결과가 나타날 때까지 짧게 기다립니다.
-                # 이전 검색의 숨겨진 행은 절대 사용하지 않습니다.
-                rows = []
-                deadline = time.time() + 6.0
-                while time.time() < deadline:
-                    try:
-                        popup_button = WebDriverWait(driver, 0.3).until(
-                            EC.presence_of_element_located(
-                                (
-                                    By.XPATH,
-                                    "//a[contains(text(), '확인') and contains(@class, 'btn solid medium color-main')]",
-                                )
-                            )
+                rows, explicit_no_result = wait_for_company_search_rows(
+                    driver,
+                    company,
+                    timeout=5.0,
+                )
+
+                # '검색결과 없음'이 명확히 뜬 경우에는 불필요한 재검색을 하지 않습니다.
+                # 결과가 늦게 갱신된 것으로 보이는 경우에만 동일 검색어로 1회 재시도합니다.
+                if not rows and not explicit_no_result:
+                    yield log(f"↻ [{current_no}/{total}] {company} — 결과 확인이 늦어 1회 재검색합니다.")
+                    set_company_search_input(driver, search_box, company)
+                    search_button = wait.until(
+                        EC.element_to_be_clickable(
+                            (By.ID, "mf_wfm_potal_main_wfm_content_btn_conm_name_search")
                         )
-                        if popup_button.is_displayed():
-                            driver.execute_script("arguments[0].click();", popup_button)
-                    except Exception:
-                        pass
-
-                    rows = get_visible_company_search_rows(driver, company)
-                    if rows:
-                        break
-
-                    body_text = driver.find_element(By.TAG_NAME, "body").text
-                    if any(text in body_text for text in [
-                        "검색결과가 없습니다",
-                        "조회된 결과가 없습니다",
-                        "검색 결과가 없습니다",
-                    ]):
-                        break
-
-                    time.sleep(0.25)
+                    )
+                    driver.execute_script("arguments[0].click();", search_button)
+                    rows, explicit_no_result = wait_for_company_search_rows(
+                        driver,
+                        company,
+                        timeout=4.0,
+                    )
 
                 if not rows:
-                    yield log(f"⏭️ [{current_no}/{total}] {company} — 유효 데이터 없음")
+                    status_text = "검색결과 없음" if explicit_no_result else "검색 결과 확인 실패"
+                    yield log(f"⏭️ [{current_no}/{total}] {company} — {status_text}")
                     yield make_event("progress", current=current_no, total=total, result_count=len(results))
                     continue
 
