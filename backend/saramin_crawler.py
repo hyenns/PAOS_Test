@@ -26,6 +26,7 @@ SARAMIN_INTRO_COLUMNS = [
     "기업형태",
     "사원수",
     "매출액",
+    "매출액 기준연도",
     "평균연봉",
     "홈페이지",
     "사업내용",
@@ -75,6 +76,45 @@ def is_related_company(keyword: str, corp_name: str) -> bool:
     if not keyword_key or not name_key:
         return False
     return keyword_key in name_key or name_key in keyword_key
+
+
+def extract_latest_sales_year_from_search_link(link) -> str:
+    """사람인 검색 결과 카드에서 최신 매출액의 기준연도만 빠르게 추출합니다.
+
+    기업소개 상세 페이지에는 최신 매출액 금액은 있지만 기준연도가 표시되지 않는 경우가 있습니다.
+    반면 검색 결과 카드에는 '매출액 ... (2025년 기준)' 형태로 기준연도가 함께 있으므로,
+    재무정보 페이지를 추가로 열지 않고 현재 검색 페이지 DOM에서 연도만 가져옵니다.
+    """
+    # 회사명 링크에서 가까운 컨테이너부터 바깥쪽으로 올라가며
+    # '매출액'과 'YYYY년 기준'이 함께 있는 가장 작은 카드 영역을 찾습니다.
+    for depth in range(1, 9):
+        try:
+            container = link.find_element(
+                By.XPATH,
+                f"(./ancestor::*[self::li or self::article or self::div])[{depth}]",
+            )
+            raw_text = container.text or container.get_attribute("textContent") or ""
+            card_text = clean_text(raw_text)
+            if "매출액" not in card_text:
+                continue
+
+            # 예: '매출액 185억 영업이익 23억 (2025년 기준) 전체'
+            match = re.search(
+                r"매출액.{0,300}?\(?((?:19|20)\d{2})년\s*기준\)?",
+                card_text,
+            )
+            if match:
+                return match.group(1)
+
+            # 카드 구조상 '년 기준'이 매출액보다 앞에 렌더링되는 예외 대비.
+            if len(card_text) <= 1200:
+                match = re.search(r"\(?((?:19|20)\d{2})년\s*기준\)?", card_text)
+                if match:
+                    return match.group(1)
+        except Exception:
+            continue
+
+    return ""
 
 
 def extract_between(body_text: str, label: str, stop_labels: list[str]) -> str:
@@ -430,8 +470,13 @@ def run_saramin_crawler_events(
                             continue
                         if "/company-info/" not in url:
                             continue
+                        sales_year = extract_latest_sales_year_from_search_link(link)
                         seen.add(url)
-                        corp_list.append({"corp_name": name, "corp_url": url})
+                        corp_list.append({
+                            "corp_name": name,
+                            "corp_url": url,
+                            "sales_year": sales_year,
+                        })
                     except Exception:
                         continue
 
@@ -470,6 +515,7 @@ def run_saramin_crawler_events(
                             "기업형태": detail.get("기업형태", ""),
                             "사원수": detail.get("사원수", ""),
                             "매출액": detail.get("매출액", ""),
+                            "매출액 기준연도": corp.get("sales_year", ""),
                             "평균연봉": detail.get("평균연봉", ""),
                             "홈페이지": detail.get("홈페이지", ""),
                             "사업내용": detail.get("사업내용", ""),
