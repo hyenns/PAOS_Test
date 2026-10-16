@@ -10,13 +10,7 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-from backend.iros_crawler import (
-    IROS_RESULT_COLUMNS,
-    complete_iros_login_browser,
-    get_iros_login_status,
-    run_iros_crawler_events,
-    start_iros_login_browser,
-)
+from backend.iros_crawler import IROS_RESULT_COLUMNS, run_iros_crawler_events
 from backend.saramin_crawler import SARAMIN_RESULT_COLUMNS, get_saramin_result_columns, run_saramin_crawler_events
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -401,7 +395,11 @@ def build_saramin_clean_rows(rows: list[dict], columns: list[str], options: dict
                 value = clean_employee_count(value)
             elif column == "홈페이지" and clean_homepage:
                 value = clean_homepage_url(value)
-            elif clean_money and any(keyword in column for keyword in MONEY_COLUMNS):
+            elif (
+                clean_money
+                and "기준연도" not in column
+                and any(keyword in column for keyword in MONEY_COLUMNS)
+            ):
                 value = parse_korean_money_to_million(value)
 
             clean_row[column] = value
@@ -448,23 +446,6 @@ def static_files(path: str):
 @app.route("/api/health")
 def health():
     return jsonify({"ok": True, "app": "WorkLab PAOS", "mode": "team-test"})
-
-
-@app.route("/api/iros/login/status", methods=["GET"])
-def api_iros_login_status():
-    return jsonify(get_iros_login_status())
-
-
-@app.route("/api/iros/login/start", methods=["POST"])
-def api_iros_login_start():
-    data = start_iros_login_browser()
-    return jsonify(data), (200 if data.get("ok") else 500)
-
-
-@app.route("/api/iros/login/complete", methods=["POST"])
-def api_iros_login_complete():
-    data = complete_iros_login_browser()
-    return jsonify(data), (200 if data.get("ok") else 400)
 
 
 @app.route("/api/iros/run", methods=["POST"])
