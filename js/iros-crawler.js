@@ -187,16 +187,16 @@ async function checkIrosLoginStatus() {
     if (!res.ok) throw new Error('login status not available');
     const data = await res.json();
 
-    if (data.browser_open) {
+    if (data.session_active) {
+      $status.html('✅ 로그인 연결 유지 중입니다. <strong>등기소 Chrome 창을 닫지 말고</strong> 크롤링을 실행해 주세요.');
+      $('#btn-iros-login-complete').hide();
+      $('#btn-iros-login-start').text('🔐 로그인 연결됨').prop('disabled', true);
+    } else if (data.browser_open) {
       $status.html('🟡 로그인 창이 열려 있습니다. 인터넷등기소에서 로그인한 뒤 <strong>로그인 완료</strong>를 눌러 주세요.');
       $('#btn-iros-login-complete').show();
       $('#btn-iros-login-start').text('🔐 로그인 창 열림').prop('disabled', true);
-    } else if (data.session_saved) {
-      $status.html('✅ 저장된 로그인 세션이 있습니다. 세션이 만료되면 다시 로그인해 주세요.');
-      $('#btn-iros-login-complete').hide();
-      $('#btn-iros-login-start').text('🔐 다시 로그인').prop('disabled', false);
     } else {
-      $status.html('⚠️ 저장된 로그인 세션이 없습니다. 크롤링 전에 등기소 로그인을 진행해 주세요.');
+      $status.html('⚠️ 현재 로그인 연결이 없습니다. 크롤링 전에 등기소 로그인을 진행해 주세요.');
       $('#btn-iros-login-complete').hide();
       $('#btn-iros-login-start').text('🔐 등기소 로그인').prop('disabled', false);
     }
@@ -226,11 +226,11 @@ async function startIrosLogin() {
 
 async function completeIrosLogin() {
   const $btn = $('#btn-iros-login-complete');
-  $btn.prop('disabled', true).text('⏳ 세션 저장 중...');
+  $btn.prop('disabled', true).text('⏳ 로그인 확인 중...');
   try {
     const res = await fetch('/api/iros/login/complete', { method: 'POST' });
     const data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.message || '로그인 세션을 저장하지 못했습니다.');
+    if (!res.ok || data.ok === false) throw new Error(data.message || '로그인 연결을 완료하지 못했습니다.');
     $('#iros-login-status').text(`✅ ${data.message}`);
   } catch (e) {
     alert(e.message);
@@ -386,12 +386,12 @@ async function runIrosCrawler() {
     alert('등기소 로그인 상태를 확인할 수 없습니다. WorkLab 서버 연결을 확인해 주세요.');
     return;
   }
-  if (loginState.browser_open) {
-    alert("등기소 로그인 창이 열려 있습니다. 로그인 후 WorkLab에서 '로그인 완료'를 눌러 주세요.");
-    return;
-  }
-  if (!loginState.session_saved) {
-    alert("인터넷등기소 로그인이 필요합니다. 먼저 '등기소 로그인'을 진행해 주세요.");
+  if (!loginState.session_active) {
+    if (loginState.browser_open) {
+      alert("등기소 로그인 창이 열려 있습니다. 로그인 후 WorkLab에서 '로그인 완료'를 눌러 주세요.");
+    } else {
+      alert("인터넷등기소 로그인이 필요합니다. 먼저 '등기소 로그인'을 진행해 주세요.");
+    }
     return;
   }
 
