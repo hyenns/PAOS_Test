@@ -180,6 +180,66 @@ function updatePreview() {
   renderTable('#iros-preview-table', rows, 10, null, startCol);
 }
 
+async function checkIrosLoginStatus() {
+  const $status = $('#iros-login-status');
+  try {
+    const res = await fetch('/api/iros/login/status', { cache: 'no-store' });
+    if (!res.ok) throw new Error('login status not available');
+    const data = await res.json();
+
+    if (data.browser_open) {
+      $status.html('🟡 로그인 창이 열려 있습니다. 인터넷등기소에서 로그인한 뒤 <strong>로그인 완료</strong>를 눌러 주세요.');
+      $('#btn-iros-login-complete').show();
+      $('#btn-iros-login-start').text('🔐 로그인 창 열림').prop('disabled', true);
+    } else if (data.session_saved) {
+      $status.html('✅ 저장된 로그인 세션이 있습니다. 세션이 만료되면 다시 로그인해 주세요.');
+      $('#btn-iros-login-complete').hide();
+      $('#btn-iros-login-start').text('🔐 다시 로그인').prop('disabled', false);
+    } else {
+      $status.html('⚠️ 저장된 로그인 세션이 없습니다. 크롤링 전에 등기소 로그인을 진행해 주세요.');
+      $('#btn-iros-login-complete').hide();
+      $('#btn-iros-login-start').text('🔐 등기소 로그인').prop('disabled', false);
+    }
+    return data;
+  } catch (e) {
+    $status.text('⚠️ 로그인 상태를 확인할 수 없습니다. WorkLab 서버 연결을 확인해 주세요.');
+    return null;
+  }
+}
+
+async function startIrosLogin() {
+  const $btn = $('#btn-iros-login-start');
+  $btn.prop('disabled', true).text('⏳ 로그인 창 여는 중...');
+  try {
+    const res = await fetch('/api/iros/login/start', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || '로그인 창을 열 수 없습니다.');
+
+    $('#iros-login-status').html('🟡 인터넷등기소 Chrome 창에서 직접 로그인해 주세요. <strong>창을 직접 닫지 말고</strong>, 로그인 후 WorkLab의 <strong>로그인 완료</strong>를 눌러 주세요.');
+    $('#btn-iros-login-complete').show();
+    $btn.text('🔐 로그인 창 열림');
+  } catch (e) {
+    alert(e.message);
+    $btn.prop('disabled', false).text('🔐 등기소 로그인');
+  }
+}
+
+async function completeIrosLogin() {
+  const $btn = $('#btn-iros-login-complete');
+  $btn.prop('disabled', true).text('⏳ 세션 저장 중...');
+  try {
+    const res = await fetch('/api/iros/login/complete', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.message || '로그인 세션을 저장하지 못했습니다.');
+    $('#iros-login-status').text(`✅ ${data.message}`);
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    $btn.prop('disabled', false).text('✅ 로그인 완료');
+    await checkIrosLoginStatus();
+  }
+}
+
 async function checkServer() {
   const $status = $('#iros-server-status');
   try {
@@ -321,6 +381,20 @@ async function runIrosCrawler() {
     return;
   }
 
+  const loginState = await checkIrosLoginStatus();
+  if (!loginState) {
+    alert('등기소 로그인 상태를 확인할 수 없습니다. WorkLab 서버 연결을 확인해 주세요.');
+    return;
+  }
+  if (loginState.browser_open) {
+    alert("등기소 로그인 창이 열려 있습니다. 로그인 후 WorkLab에서 '로그인 완료'를 눌러 주세요.");
+    return;
+  }
+  if (!loginState.session_saved) {
+    alert("인터넷등기소 로그인이 필요합니다. 먼저 '등기소 로그인'을 진행해 주세요.");
+    return;
+  }
+
   const sheetName = $('#iros-sheet-select').val();
   const headerMode = $('#iros-header-mode').val();
   const columnIndex = $('#iros-column-select').val();
@@ -415,6 +489,9 @@ async function runIrosCrawler() {
     }));
     appendIrosLog(e.message);
     alert(e.message);
+    if (String(e.message || '').includes('로그인')) {
+      await checkIrosLoginStatus();
+    }
   } finally {
     $('#btn-run-iros').prop('disabled', false).text('🚀 등기소 크롤링 시작');
   }
@@ -445,6 +522,7 @@ export function showIrosPanel() {
   $('#iros-panel').show();
   document.getElementById('iros-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   checkServer();
+  checkIrosLoginStatus();
 }
 
 export function initIrosCrawler() {
@@ -453,6 +531,8 @@ export function initIrosCrawler() {
     if (file) await handleFile(file);
   });
 
+  $('#btn-iros-login-start').on('click', startIrosLogin);
+  $('#btn-iros-login-complete').on('click', completeIrosLogin);
   $('#iros-search-mode').on('change', updateIrosSearchModeUI);
   $('#iros-sheet-select').on('change', updateColumnOptions);
   $('#iros-header-mode').on('change', updateColumnOptions);

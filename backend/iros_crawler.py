@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
 import time
+import threading
+from pathlib import Path
 from typing import Iterable, Iterator, Any
 
 from selenium import webdriver
@@ -33,11 +36,207 @@ def make_event(event_type: str, **payload: Any) -> dict[str, Any]:
     return {"type": event_type, **payload}
 
 
-def get_driver(*, headless: bool = True, page_load_strategy: str | None = None) -> webdriver.Chrome:
+class IrosLoginRequiredError(RuntimeError):
+    """인터넷등기소 로그인 세션이 없거나 만료된 경우 사용합니다."""
+
+
+_IROS_LOGIN_DRIVER = None
+_IROS_LOGIN_LOCK = threading.Lock()
+
+
+def get_iros_profile_dir() -> Path:
+    """WorkLab 전용 인터넷등기소 Chrome 프로필 경로를 반환합니다.
+
+    계정정보를 코드나 GitHub에 저장하지 않고, 사용자의 로컬 Chrome 프로필 안에
+    쿠키/세션만 보관합니다.
+    """
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        base_dir = Path(local_app_data) / "WorkLab_PAOS"
+    else:
+        base_dir = Path.home() / ".worklab_paos"
+
+    profile_dir = base_dir / "iros_chrome_profile"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    return profile_dir
+
+
+def get_iros_session_marker_path() -> Path:
+    return get_iros_profile_dir().parent / "iros_session_saved.txt"
+
+
+def has_iros_saved_session() -> bool:
+    return get_iros_session_marker_path().exists()
+
+
+def invalidate_iros_saved_session() -> None:
+    try:
+        get_iros_session_marker_path().unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _login_driver_alive() -> bool:
+    global _IROS_LOGIN_DRIVER
+    if _IROS_LOGIN_DRIVER is None:
+        return False
+    try:
+        _ = _IROS_LOGIN_DRIVER.current_url
+        return True
+    except Exception:
+        _IROS_LOGIN_DRIVER = None
+        return False
+
+
+def is_iros_login_browser_open() -> bool:
+    with _IROS_LOGIN_LOCK:
+        return _login_driver_alive()
+
+
+def _looks_like_iros_login_page(driver: webdriver.Chrome) -> bool:
+    """현재 화면이 로그인 요구 화면인지 보수적으로 확인합니다."""
+    try:
+        current_url = (driver.current_url or "").lower()
+        if any(token in current_url for token in ["login", "signin", "memberlogin"]):
+            return True
+    except Exception:
+        pass
+
+    try:
+        password_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
+        for element in password_inputs:
+            try:
+                if element.is_displayed():
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    try:
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        compact = re.sub(r"\s+", " ", body_text or "")
+        login_phrases = ["로그인이 필요", "로그인 후 이용", "회원 로그인", "아이디 비밀번호"]
+        if any(phrase in compact for phrase in login_phrases):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def ensure_iros_logged_in(driver: webdriver.Chrome) -> None:
+    if _looks_like_iros_login_page(driver):
+        invalidate_iros_saved_session()
+        raise IrosLoginRequiredError(
+            "인터넷등기소 로그인 세션이 없거나 만료되었습니다. WorkLab의 '등기소 로그인'에서 다시 로그인해 주세요."
+        )
+
+
+def start_iros_login_browser() -> dict[str, Any]:
+    """WorkLab 전용 프로필로 로그인용 Chrome을 엽니다."""
+    global _IROS_LOGIN_DRIVER
+    with _IROS_LOGIN_LOCK:
+        if _login_driver_alive():
+            return {
+                "ok": True,
+                "browser_open": True,
+                "message": "이미 등기소 로그인 창이 열려 있습니다.",
+            }
+
+        try:
+            driver = get_driver(headless=False, use_iros_profile=True)
+            driver.get(IROS_URL)
+            _IROS_LOGIN_DRIVER = driver
+            return {
+                "ok": True,
+                "browser_open": True,
+                "message": "등기소 로그인 창을 열었습니다. 공식 사이트에서 직접 로그인한 뒤 WorkLab에서 '로그인 완료'를 눌러 주세요.",
+            }
+        except Exception as exc:
+            _IROS_LOGIN_DRIVER = None
+            return {
+                "ok": False,
+                "browser_open": False,
+                "message": f"등기소 로그인 창을 열 수 없습니다: {str(exc)[:160]}",
+            }
+
+
+def complete_iros_login_browser() -> dict[str, Any]:
+    """로그인용 Chrome을 닫고 현재 프로필을 크롤링용 세션으로 저장합니다."""
+    global _IROS_LOGIN_DRIVER
+    with _IROS_LOGIN_LOCK:
+        if not _login_driver_alive():
+            return {
+                "ok": False,
+                "browser_open": False,
+                "session_saved": has_iros_saved_session(),
+                "message": "열려 있는 등기소 로그인 창을 찾지 못했습니다. '등기소 로그인'을 다시 눌러 주세요.",
+            }
+
+        login_detected = False
+        try:
+            body_text = _IROS_LOGIN_DRIVER.find_element(By.TAG_NAME, "body").text
+            login_detected = "로그아웃" in (body_text or "")
+        except Exception:
+            pass
+
+        try:
+            # Chrome이 쿠키/세션을 프로필에 기록할 시간을 잠깐 줍니다.
+            time.sleep(0.5)
+            _IROS_LOGIN_DRIVER.quit()
+        finally:
+            _IROS_LOGIN_DRIVER = None
+
+        marker = get_iros_session_marker_path()
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(int(time.time())), encoding="utf-8")
+
+        return {
+            "ok": True,
+            "browser_open": False,
+            "session_saved": True,
+            "login_detected": login_detected,
+            "message": (
+                "로그인 세션을 저장했습니다. 이제 등기소 크롤링을 실행할 수 있습니다."
+                if login_detected
+                else "로그인 창을 닫고 세션을 저장했습니다. 실제 로그인 상태는 크롤링 시작 시 다시 확인합니다."
+            ),
+        }
+
+
+def get_iros_login_status() -> dict[str, Any]:
+    marker = get_iros_session_marker_path()
+    saved_at = None
+    if marker.exists():
+        try:
+            saved_at = int(marker.read_text(encoding="utf-8").strip())
+        except Exception:
+            saved_at = None
+
+    return {
+        "ok": True,
+        "browser_open": is_iros_login_browser_open(),
+        "session_saved": marker.exists(),
+        "saved_at": saved_at,
+    }
+
+
+def get_driver(
+    *,
+    headless: bool = True,
+    page_load_strategy: str | None = None,
+    use_iros_profile: bool = True,
+) -> webdriver.Chrome:
     options = Options()
 
     if page_load_strategy:
         options.page_load_strategy = page_load_strategy
+
+    if use_iros_profile:
+        profile_dir = get_iros_profile_dir()
+        options.add_argument(f"--user-data-dir={profile_dir}")
+        options.add_argument("--profile-directory=Default")
 
     if headless:
         # Chrome 창을 띄우지 않고 백그라운드에서 실행합니다.
@@ -102,6 +301,7 @@ def enter_iros_business_search(
 ) -> None:
     """기존 Streamlit/bat에서 정상 동작하던 방식과 동일한 상호검색 진입 로직."""
     driver.get(IROS_URL)
+    ensure_iros_logged_in(driver)
 
     menu_element = wait.until(
         EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), '등기지원 서비스')]"))
@@ -115,6 +315,7 @@ def enter_iros_business_search(
     )
     driver.execute_script("arguments[0].click();", business_search)
     time.sleep(2)
+    ensure_iros_logged_in(driver)
 
     Select(
         wait.until(
@@ -279,6 +480,7 @@ def enter_iros_registration_search(driver: webdriver.Chrome, wait: WebDriverWait
     그 안의 법인 열에 있는 '열람·발급' 링크를 찾아 클릭합니다.
     """
     driver.get(IROS_URL)
+    ensure_iros_logged_in(driver)
 
     # 1) 상단 '열람·발급' 메뉴: 클릭하면 메가메뉴가 닫히거나 다른 화면으로 이동할 수 있으므로 hover 우선
     try:
@@ -305,6 +507,10 @@ def enter_iros_registration_search(driver: webdriver.Chrome, wait: WebDriverWait
 
     try:
         _click_element(driver, corp_issue_link)
+        time.sleep(0.5)
+        ensure_iros_logged_in(driver)
+    except IrosLoginRequiredError:
+        raise
     except Exception as exc:
         raise RuntimeError("법인 '열람·발급' 메뉴 클릭에 실패했습니다.") from exc
 
@@ -821,6 +1027,25 @@ def run_iros_crawler_events(
 
     driver = None
     try:
+        if is_iros_login_browser_open():
+            yield make_event(
+                "error",
+                code="IROS_LOGIN_BROWSER_OPEN",
+                message="등기소 로그인 창이 아직 열려 있습니다. 로그인 후 WorkLab에서 '로그인 완료'를 눌러 창을 닫은 뒤 크롤링을 시작해 주세요.",
+                logs=logs.copy(),
+            )
+            return
+
+        if not has_iros_saved_session():
+            yield make_event(
+                "error",
+                code="IROS_LOGIN_REQUIRED",
+                message="인터넷등기소 로그인이 필요합니다. 먼저 WorkLab의 '등기소 로그인' 버튼으로 로그인해 주세요.",
+                logs=logs.copy(),
+            )
+            return
+
+        yield log("🔐 저장된 인터넷등기소 로그인 세션을 사용합니다.")
         yield log("🌐 인터넷등기소 접속 중...")
         yield log(f"검색 방식: {'등록번호검색' if search_mode == 'registration' else '상호검색'}")
         if search_mode == "registration":
@@ -833,7 +1058,7 @@ def run_iros_crawler_events(
                 f"주말된 상호(명칭) 포함={'ON' if include_erased_names else 'OFF'}"
             )
 
-        driver = get_driver(headless=headless)
+        driver = get_driver(headless=headless, use_iros_profile=True)
         wait = WebDriverWait(driver, 12)
 
         if search_mode == "registration":
@@ -1013,6 +1238,14 @@ def run_iros_crawler_events(
             logs=logs.copy(),
         )
 
+    except IrosLoginRequiredError as e:
+        invalidate_iros_saved_session()
+        yield make_event(
+            "error",
+            code="IROS_LOGIN_REQUIRED",
+            message=str(e),
+            logs=logs.copy(),
+        )
     except Exception as e:
         yield make_event("error", message=f"등기소 크롤링 실패: {str(e)}", logs=logs.copy())
     finally:
