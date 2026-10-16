@@ -4,6 +4,8 @@ import os
 import re
 import time
 import threading
+import json
+import shutil
 from pathlib import Path
 from typing import Iterable, Iterator, Any
 
@@ -61,6 +63,136 @@ def get_iros_profile_dir() -> Path:
     profile_dir = base_dir / "iros_chrome_profile"
     profile_dir.mkdir(parents=True, exist_ok=True)
     return profile_dir
+
+
+def get_regular_chrome_user_data_dir() -> Path:
+    """Windows에서 사용자가 평소 사용하는 Chrome User Data 경로를 반환합니다."""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "Google" / "Chrome" / "User Data"
+    return Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data"
+
+
+def get_regular_chrome_last_profile() -> tuple[Path, str]:
+    """평소 Chrome에서 마지막으로 사용한 프로필 폴더를 찾습니다."""
+    user_data_dir = get_regular_chrome_user_data_dir()
+    local_state_path = user_data_dir / "Local State"
+
+    profile_name = "Default"
+    try:
+        if local_state_path.exists():
+            data = json.loads(local_state_path.read_text(encoding="utf-8"))
+            last_used = (
+                data.get("profile", {}).get("last_used")
+                or data.get("profile", {}).get("last_active_profiles", [None])[0]
+            )
+            if last_used and (user_data_dir / str(last_used)).exists():
+                profile_name = str(last_used)
+    except Exception:
+        pass
+
+    profile_dir = user_data_dir / profile_name
+    if not profile_dir.exists():
+        fallback = user_data_dir / "Default"
+        if fallback.exists():
+            profile_dir = fallback
+            profile_name = "Default"
+
+    return profile_dir, profile_name
+
+
+def sync_regular_chrome_security_environment() -> dict[str, Any]:
+    """평소 Chrome의 확장/보안 환경을 WorkLab 전용 프로필에 복사합니다.
+
+    인터넷등기소 보안프로그램은 Windows에 설치되어 있어도 Chrome 프로필에 연결된
+    확장프로그램/설정이 없으면 '설치 필요'로 오인될 수 있습니다. Selenium이 실제
+    기본 Chrome 프로필을 직접 사용하면 프로필 잠금과 최신 Chrome 보안 정책 때문에
+    불안정하므로, 확장프로그램 관련 파일만 WorkLab 전용 프로필로 동기화합니다.
+
+    로그인 쿠키/비밀번호/방문기록은 의도적으로 복사하지 않습니다.
+    """
+    source_root = get_regular_chrome_user_data_dir()
+    source_profile, source_profile_name = get_regular_chrome_last_profile()
+    target_root = get_iros_profile_dir()
+    target_profile = target_root / "Default"
+    target_profile.mkdir(parents=True, exist_ok=True)
+
+    if not source_root.exists() or not source_profile.exists():
+        return {
+            "ok": False,
+            "message": "평소 사용하는 Chrome 프로필을 찾지 못했습니다.",
+            "profile": source_profile_name,
+        }
+
+    copied = []
+
+    # Chrome 확장 프로그램의 보호 설정/등록 정보.
+    for filename in ["Preferences", "Secure Preferences"]:
+        src = source_profile / filename
+        dst = target_profile / filename
+        if src.exists():
+            try:
+                shutil.copy2(src, dst)
+                copied.append(filename)
+            except Exception:
+                pass
+
+    # 보안프로그램 연동 확장과 확장별 저장 설정.
+    extension_dirs = [
+        "Extensions",
+        "Local Extension Settings",
+        "Sync Extension Settings",
+        "Managed Extension Settings",
+        "Extension Rules",
+        "Extension State",
+    ]
+    for dirname in extension_dirs:
+        src = source_profile / dirname
+        dst = target_profile / dirname
+        if not src.exists():
+            continue
+        try:
+            if dst.exists():
+                shutil.rmtree(dst, ignore_errors=True)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            copied.append(dirname)
+        except Exception:
+            # 일부 확장 파일이 Chrome 백그라운드 프로세스에 의해 잠겨 있어도
+            # 나머지 보안환경 복사는 계속 진행합니다.
+            continue
+
+    # 확장/프로필 보호값 계산에 필요한 Chrome Local State.
+    local_state_src = source_root / "Local State"
+    local_state_dst = target_root / "Local State"
+    if local_state_src.exists():
+        try:
+            shutil.copy2(local_state_src, local_state_dst)
+            copied.append("Local State")
+        except Exception:
+            pass
+
+    if not copied:
+        return {
+            "ok": False,
+            "message": "Chrome 보안환경을 복사하지 못했습니다. 평소 Chrome을 완전히 종료한 뒤 다시 시도해 주세요.",
+            "profile": source_profile_name,
+        }
+
+    marker = target_root.parent / "iros_chrome_environment_synced.txt"
+    try:
+        marker.write_text(
+            f"profile={source_profile_name}\ntime={int(time.time())}\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "profile": source_profile_name,
+        "copied_count": len(copied),
+        "message": f"평소 Chrome({source_profile_name})의 보안환경을 WorkLab에 연결했습니다.",
+    }
 
 
 def get_iros_session_marker_path() -> Path:
@@ -177,15 +309,31 @@ def start_iros_login_browser() -> dict[str, Any]:
             }
 
         try:
+            chrome_sync = sync_regular_chrome_security_environment()
+            if not chrome_sync.get("ok"):
+                return {
+                    "ok": False,
+                    "browser_open": False,
+                    "session_active": False,
+                    "message": chrome_sync.get(
+                        "message",
+                        "평소 Chrome의 보안환경을 WorkLab에 연결하지 못했습니다."
+                    ),
+                }
+
             driver = get_driver(headless=False, use_iros_profile=True)
             driver.get(IROS_URL)
             _IROS_LOGIN_DRIVER = driver
             _IROS_LOGIN_READY = False
+            profile_name = chrome_sync.get("profile", "Default")
             return {
                 "ok": True,
                 "browser_open": True,
                 "session_active": False,
-                "message": "등기소 로그인 창을 열었습니다. 공식 사이트에서 직접 로그인한 뒤 WorkLab에서 '로그인 완료'를 눌러 주세요.",
+                "message": (
+                    f"평소 Chrome({profile_name})의 보안환경을 연결해 등기소 창을 열었습니다. "
+                    "인터넷등기소에 직접 로그인한 뒤 WorkLab에서 '로그인 완료'를 눌러 주세요."
+                ),
             }
         except Exception as exc:
             _IROS_LOGIN_DRIVER = None
@@ -302,6 +450,8 @@ def get_driver(
     else:
         options.add_argument("--start-maximized")
 
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
