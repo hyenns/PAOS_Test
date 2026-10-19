@@ -10,7 +10,13 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-from backend.iros_crawler import IROS_RESULT_COLUMNS, run_iros_crawler_events
+from backend.iros_crawler import (
+    IROS_RESULT_COLUMNS,
+    run_iros_crawler_events,
+    start_iros_login_browser,
+    complete_iros_login_browser,
+    get_iros_login_status,
+)
 from backend.saramin_crawler import SARAMIN_RESULT_COLUMNS, get_saramin_result_columns, run_saramin_crawler_events
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -446,6 +452,51 @@ def static_files(path: str):
 @app.route("/api/health")
 def health():
     return jsonify({"ok": True, "app": "WorkLab PAOS", "mode": "team-test"})
+
+
+@app.route("/api/iros/login/status", methods=["GET"])
+def api_iros_login_status():
+    try:
+        return jsonify(get_iros_login_status())
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "browser_open": False,
+            "session_active": False,
+            "session_saved": False,
+            "message": f"등기소 로그인 상태 확인 실패: {str(e)[:200]}",
+        }), 500
+
+
+@app.route("/api/iros/login/start", methods=["POST"])
+def api_iros_login_start():
+    try:
+        result = start_iros_login_browser()
+        status_code = 200 if result.get("ok", False) else 500
+        return jsonify(result), status_code
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "browser_open": False,
+            "session_active": False,
+            "message": f"등기소 로그인 창 실행 실패: {str(e)[:200]}",
+        }), 500
+
+
+@app.route("/api/iros/login/complete", methods=["POST"])
+def api_iros_login_complete():
+    try:
+        result = complete_iros_login_browser()
+        status_code = 200 if result.get("ok", False) else 400
+        return jsonify(result), status_code
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "browser_open": False,
+            "session_active": False,
+            "session_saved": False,
+            "message": f"등기소 로그인 완료 처리 실패: {str(e)[:200]}",
+        }), 500
 
 
 @app.route("/api/iros/run", methods=["POST"])
