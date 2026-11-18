@@ -6,6 +6,8 @@ import time
 import threading
 import json
 import shutil
+import socket
+import subprocess
 from pathlib import Path
 from typing import Iterable, Iterator, Any
 
@@ -43,6 +45,8 @@ class IrosLoginRequiredError(RuntimeError):
 
 
 _IROS_LOGIN_DRIVER = None
+_IROS_LOGIN_PROCESS = None
+_IROS_DEBUG_PORT = None
 _IROS_LOGIN_LOCK = threading.Lock()
 _IROS_BROWSER_USE_LOCK = threading.Lock()
 _IROS_LOGIN_READY = False
@@ -63,6 +67,171 @@ def get_iros_profile_dir() -> Path:
     profile_dir = base_dir / "iros_chrome_profile"
     profile_dir.mkdir(parents=True, exist_ok=True)
     return profile_dir
+
+
+def get_iros_debug_port_path() -> Path:
+    return get_iros_profile_dir().parent / "iros_debug_port.txt"
+
+
+def _save_iros_debug_port(port: int) -> None:
+    try:
+        path = get_iros_debug_port_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(int(port)), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_iros_debug_port() -> int | None:
+    global _IROS_DEBUG_PORT
+    if _IROS_DEBUG_PORT:
+        return int(_IROS_DEBUG_PORT)
+    try:
+        path = get_iros_debug_port_path()
+        if path.exists():
+            value = int(path.read_text(encoding="utf-8").strip())
+            if 1 <= value <= 65535:
+                _IROS_DEBUG_PORT = value
+                return value
+    except Exception:
+        pass
+    return None
+
+
+def _clear_iros_debug_port() -> None:
+    global _IROS_DEBUG_PORT
+    _IROS_DEBUG_PORT = None
+    try:
+        get_iros_debug_port_path().unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _is_debug_port_open(port: int | None = None) -> bool:
+    port = int(port or _load_iros_debug_port() or 0)
+    if not port:
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.35):
+            return True
+    except Exception:
+        return False
+
+
+def _pick_free_local_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def find_chrome_executable() -> Path:
+    """Windows에서 일반 Chrome 실행 파일을 찾습니다."""
+    candidates: list[Path] = []
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    program_files = os.environ.get("PROGRAMFILES")
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
+
+    if program_files:
+        candidates.append(Path(program_files) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    if program_files_x86:
+        candidates.append(Path(program_files_x86) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "Google" / "Chrome" / "Application" / "chrome.exe")
+
+    which_path = shutil.which("chrome.exe") or shutil.which("chrome")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                return candidate
+        except Exception:
+            continue
+
+    raise FileNotFoundError(
+        "Google Chrome 실행 파일을 찾지 못했습니다. Chrome이 설치되어 있는지 확인해 주세요."
+    )
+
+
+def launch_plain_iros_chrome() -> dict[str, Any]:
+    """Selenium 없이 일반 chrome.exe를 직접 실행해 인터넷등기소 로그인 창을 엽니다.
+
+    로그인할 때는 ChromeDriver/Selenium이 전혀 붙지 않습니다.
+    로그인 완료 후에만 remote debugging 포트로 기존 Chrome에 연결합니다.
+    """
+    global _IROS_LOGIN_PROCESS, _IROS_DEBUG_PORT
+
+    chrome_path = find_chrome_executable()
+    profile_dir = get_iros_profile_dir()
+    port = _pick_free_local_port()
+
+    args = [
+        str(chrome_path),
+        f"--remote-debugging-port={port}",
+        "--remote-debugging-address=127.0.0.1",
+        f"--user-data-dir={profile_dir}",
+        "--profile-directory=Default",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--start-maximized",
+        IROS_URL,
+    ]
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+    process = subprocess.Popen(
+        args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if _is_debug_port_open(port):
+            _IROS_LOGIN_PROCESS = process
+            _IROS_DEBUG_PORT = port
+            _save_iros_debug_port(port)
+            return {
+                "ok": True,
+                "port": port,
+                "pid": process.pid,
+            }
+        if process.poll() is not None:
+            break
+        time.sleep(0.2)
+
+    try:
+        process.terminate()
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "일반 Chrome은 실행했지만 WorkLab 연결 포트를 열지 못했습니다. "
+        "열려 있는 WorkLab용 등기소 Chrome 창을 닫고 다시 시도해 주세요."
+    )
+
+
+def attach_to_iros_chrome() -> webdriver.Chrome:
+    """로그인 완료 후 이미 열려 있는 일반 Chrome에 Selenium을 연결합니다."""
+    port = _load_iros_debug_port()
+    if not port or not _is_debug_port_open(port):
+        raise RuntimeError(
+            "로그인용 Chrome 연결을 찾지 못했습니다. '등기소 로그인'을 다시 눌러 주세요."
+        )
+
+    options = Options()
+    options.debugger_address = f"127.0.0.1:{port}"
+    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
+    return webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options,
+    )
 
 
 def get_regular_chrome_user_data_dir() -> Path:
@@ -217,14 +386,13 @@ def invalidate_iros_saved_session() -> None:
 
 
 def _login_driver_alive() -> bool:
-    global _IROS_LOGIN_DRIVER
+    global _IROS_LOGIN_DRIVER, _IROS_LOGIN_READY
     if _IROS_LOGIN_DRIVER is None:
         return False
     try:
         _ = _IROS_LOGIN_DRIVER.current_url
         return True
     except Exception:
-        global _IROS_LOGIN_READY
         _IROS_LOGIN_DRIVER = None
         _IROS_LOGIN_READY = False
         return False
@@ -232,7 +400,7 @@ def _login_driver_alive() -> bool:
 
 def is_iros_login_browser_open() -> bool:
     with _IROS_LOGIN_LOCK:
-        return _login_driver_alive()
+        return _login_driver_alive() or _is_debug_port_open()
 
 
 def _looks_like_iros_login_page(driver: webdriver.Chrome) -> bool:
@@ -276,26 +444,21 @@ def ensure_iros_logged_in(driver: webdriver.Chrome) -> None:
 
 
 def start_iros_login_browser() -> dict[str, Any]:
-    """로그인용 Chrome을 엽니다.
+    """Selenium 없이 일반 Chrome으로 인터넷등기소 로그인 창을 엽니다.
 
-    로그인 완료 후에도 이 브라우저를 닫지 않고 동일한 WebDriver 세션을
-    등기소 크롤링에 그대로 재사용합니다.
+    로그인 단계에서는 ChromeDriver를 사용하지 않습니다.
+    사용자가 로그인한 뒤 '로그인 완료'를 누르면 그때 Selenium이 기존 Chrome에 연결됩니다.
     """
     global _IROS_LOGIN_DRIVER, _IROS_LOGIN_READY
+
     with _IROS_LOGIN_LOCK:
+        # 이미 Selenium 연결까지 완료된 세션
         if _login_driver_alive():
             try:
                 _IROS_LOGIN_DRIVER.set_window_position(50, 50)
                 _IROS_LOGIN_DRIVER.maximize_window()
             except Exception:
                 pass
-
-            # 로그인 만료 후 다시 로그인 버튼을 누른 경우 같은 창을 재사용합니다.
-            if not _IROS_LOGIN_READY:
-                try:
-                    _IROS_LOGIN_DRIVER.get(IROS_URL)
-                except Exception:
-                    pass
 
             return {
                 "ok": True,
@@ -304,9 +467,22 @@ def start_iros_login_browser() -> dict[str, Any]:
                 "message": (
                     "현재 로그인 연결이 이미 유지되고 있습니다."
                     if _IROS_LOGIN_READY
-                    else "기존 등기소 Chrome 창을 다시 표시했습니다. 로그인 후 '로그인 완료'를 눌러 주세요."
+                    else "등기소 Chrome이 열려 있습니다. 로그인 후 '로그인 완료'를 눌러 주세요."
                 ),
             }
+
+        # Selenium은 아직 붙지 않았지만 일반 Chrome 로그인 창이 살아 있는 경우
+        if _is_debug_port_open():
+            return {
+                "ok": True,
+                "browser_open": True,
+                "session_active": False,
+                "message": "등기소 로그인용 일반 Chrome이 이미 열려 있습니다. 로그인 후 '로그인 완료'를 눌러 주세요.",
+            }
+
+        _IROS_LOGIN_READY = False
+        invalidate_iros_saved_session()
+        _clear_iros_debug_port()
 
         try:
             chrome_sync = sync_regular_chrome_security_environment()
@@ -321,43 +497,74 @@ def start_iros_login_browser() -> dict[str, Any]:
                     ),
                 }
 
-            driver = get_driver(headless=False, use_iros_profile=True)
-            driver.get(IROS_URL)
-            _IROS_LOGIN_DRIVER = driver
-            _IROS_LOGIN_READY = False
+            launch_info = launch_plain_iros_chrome()
             profile_name = chrome_sync.get("profile", "Default")
+
             return {
                 "ok": True,
                 "browser_open": True,
                 "session_active": False,
+                "login_mode": "plain_chrome_then_attach",
+                "debug_port": launch_info.get("port"),
                 "message": (
-                    f"평소 Chrome({profile_name})의 보안환경을 연결해 등기소 창을 열었습니다. "
-                    "인터넷등기소에 직접 로그인한 뒤 WorkLab에서 '로그인 완료'를 눌러 주세요."
+                    f"평소 Chrome({profile_name})의 보안환경을 연결한 일반 Chrome을 열었습니다. "
+                    "이 창에서 인터넷등기소에 직접 로그인한 뒤 WorkLab에서 '로그인 완료'를 눌러 주세요."
                 ),
             }
         except Exception as exc:
             _IROS_LOGIN_DRIVER = None
             _IROS_LOGIN_READY = False
+            _clear_iros_debug_port()
             return {
                 "ok": False,
                 "browser_open": False,
                 "session_active": False,
-                "message": f"등기소 로그인 창을 열 수 없습니다: {str(exc)[:160]}",
+                "message": f"등기소 로그인 창을 열 수 없습니다: {str(exc)[:220]}",
             }
 
-
 def complete_iros_login_browser() -> dict[str, Any]:
-    """현재 로그인된 Chrome을 닫지 않고 크롤링용 활성 세션으로 전환합니다."""
+    """로그인한 일반 Chrome에 Selenium을 연결하고 크롤링용 활성 세션으로 전환합니다."""
     global _IROS_LOGIN_DRIVER, _IROS_LOGIN_READY
+
     with _IROS_LOGIN_LOCK:
         if not _login_driver_alive():
+            if not _is_debug_port_open():
+                _IROS_LOGIN_READY = False
+                return {
+                    "ok": False,
+                    "browser_open": False,
+                    "session_active": False,
+                    "session_saved": False,
+                    "message": "열려 있는 등기소 로그인용 Chrome을 찾지 못했습니다. '등기소 로그인'을 다시 눌러 주세요.",
+                }
+
+            try:
+                # 로그인은 이미 사용자가 일반 Chrome에서 끝낸 뒤이므로 이 시점에만 Selenium 연결
+                _IROS_LOGIN_DRIVER = attach_to_iros_chrome()
+                time.sleep(0.3)
+            except Exception as exc:
+                _IROS_LOGIN_DRIVER = None
+                _IROS_LOGIN_READY = False
+                return {
+                    "ok": False,
+                    "browser_open": True,
+                    "session_active": False,
+                    "session_saved": False,
+                    "message": (
+                        "로그인한 Chrome에 WorkLab을 연결하지 못했습니다. "
+                        f"Chrome 창은 닫지 말고 다시 '로그인 완료'를 눌러 주세요. ({str(exc)[:140]})"
+                    ),
+                }
+
+        # 로그인 화면에 그대로 남아 있으면 아직 완료 처리하지 않습니다.
+        if _looks_like_iros_login_page(_IROS_LOGIN_DRIVER):
             _IROS_LOGIN_READY = False
             return {
                 "ok": False,
-                "browser_open": False,
+                "browser_open": True,
                 "session_active": False,
                 "session_saved": False,
-                "message": "열려 있는 등기소 로그인 창을 찾지 못했습니다. '등기소 로그인'을 다시 눌러 주세요.",
+                "message": "아직 인터넷등기소 로그인 화면입니다. 로그인을 완료한 뒤 다시 '로그인 완료'를 눌러 주세요.",
             }
 
         login_detected = False
@@ -367,19 +574,6 @@ def complete_iros_login_browser() -> dict[str, Any]:
         except Exception:
             pass
 
-        # 실제 로그인 화면이 그대로 보이는 상태라면 완료로 처리하지 않습니다.
-        if _looks_like_iros_login_page(_IROS_LOGIN_DRIVER):
-            _IROS_LOGIN_READY = False
-            return {
-                "ok": False,
-                "browser_open": True,
-                "session_active": False,
-                "session_saved": False,
-                "message": "아직 인터넷등기소 로그인 화면입니다. 로그인한 뒤 다시 '로그인 완료'를 눌러 주세요.",
-            }
-
-        # 핵심: quit() 하지 않습니다.
-        # 동일한 WebDriver/브라우저를 그대로 사용해야 인터넷등기소 인증 세션이 유지됩니다.
         _IROS_LOGIN_READY = True
 
         marker = get_iros_session_marker_path()
@@ -392,16 +586,16 @@ def complete_iros_login_browser() -> dict[str, Any]:
             "session_active": True,
             "session_saved": True,
             "login_detected": login_detected,
-            "message": "로그인 연결이 완료되었습니다. 이 Chrome 창을 닫지 않은 상태에서 크롤링을 실행해 주세요.",
+            "message": "로그인 연결이 완료되었습니다. 현재 등기소 Chrome 창을 닫지 않은 상태에서 크롤링을 실행해 주세요.",
         }
-
 
 def get_iros_login_status() -> dict[str, Any]:
     global _IROS_LOGIN_READY
 
     with _IROS_LOGIN_LOCK:
-        browser_open = _login_driver_alive()
-        session_active = browser_open and bool(_IROS_LOGIN_READY)
+        driver_alive = _login_driver_alive()
+        browser_open = driver_alive or _is_debug_port_open()
+        session_active = driver_alive and bool(_IROS_LOGIN_READY)
 
     saved_at = None
     marker = get_iros_session_marker_path()
@@ -416,6 +610,8 @@ def get_iros_login_status() -> dict[str, Any]:
             marker.unlink(missing_ok=True)
         except Exception:
             pass
+        if not browser_open:
+            _clear_iros_debug_port()
 
     return {
         "ok": True,
