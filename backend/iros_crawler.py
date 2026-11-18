@@ -226,8 +226,8 @@ def attach_to_iros_chrome() -> webdriver.Chrome:
 
     options = Options()
     options.debugger_address = f"127.0.0.1:{port}"
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
+    # 이미 실행 중인 Chrome에 연결할 때는 debuggerAddress만 전달합니다.
     return webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=options,
