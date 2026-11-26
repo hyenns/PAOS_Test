@@ -77,7 +77,7 @@ export function formatDateValue(date, fmt) {
 }
 
 // ── Amount ───────────────────────────────────────────────────────────────────
-export const AMOUNT_UNIT_LABELS = { 1: '원', 1000: '천원', 10000: '만원', 1000000: '백만원', 100000000: '억원' };
+export const AMOUNT_UNIT_LABELS = { 1: '원', 1000: '천원', 10000: '만원', 1000000: '백만원', 100000000: '억원', auto: '혼합 단위 자동(단위 없는 숫자는 원)' };
 
 export function parseFlexibleNumber(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -98,13 +98,112 @@ export function parseFlexibleNumber(value) {
   return negative ? -Math.abs(n) : n;
 }
 
+// 한국어 금액 표기는 조/억/만 단위가 섞여 있어도 원 단위로 해석합니다.
+// 단위가 없는 숫자만 '현재 데이터 단위' 설정을 사용합니다.
+function parseKoreanDigitGroup(group) {
+  if (!group) return null;
+  if (/^\d+(?:\.\d+)?$/.test(group)) return Number(group);
+
+  let total = 0;
+  let cursor = 0;
+  let previousScale = 10000;
+  const pattern = /(\d+(?:\.\d+)?)(천|백|십)/g;
+  let match;
+
+  while ((match = pattern.exec(group)) !== null) {
+    if (match.index !== cursor) return null;
+    const scale = { 천: 1000, 백: 100, 십: 10 }[match[2]];
+    if (scale >= previousScale) return null;
+    total += Number(match[1]) * scale;
+    previousScale = scale;
+    cursor = pattern.lastIndex;
+  }
+
+  if (cursor === 0) return null;
+  if (cursor < group.length) {
+    const remainder = group.slice(cursor);
+    if (!/^\d+(?:\.\d+)?$/.test(remainder)) return null;
+    total += Number(remainder);
+  }
+  return total;
+}
+
+function parseAmountToWon(value, fromUnit) {
+  if (value === null || value === undefined || value === '') return null;
+
+  // Excel 숫자 셀은 단위 표시가 없으므로 선택한 기준 단위를 적용합니다.
+  if (typeof value === 'number') {
+    const result = value * (fromUnit === 'auto' ? 1 : Number(fromUnit));
+    return Number.isSafeInteger(result) || (Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER)
+      ? result : null;
+  }
+
+  let source = cleanGhostText(value).trim();
+  if (!source) return null;
+
+  let sign = 1;
+  if (/^\(.+\)$/.test(source)) {
+    sign = -1;
+    source = source.slice(1, -1);
+  } else if (/^[-▲△]/.test(source)) {
+    sign = -1;
+    source = source.replace(/^[-▲△]/, '');
+  } else {
+    source = source.replace(/^\+/, '');
+  }
+
+  const hasWonMark = /[원₩￦]/.test(source);
+  // 천·백·십 표현은 만 단위 안쪽의 숫자에도 사용될 수 있습니다.
+  const compact = source.replace(/[\s,]/g, '').replace(/[원₩￦]/g, '');
+  if (!compact) return null;
+  if (!/^[\d.조억만천백십]+$/.test(compact)) return null;
+
+  const hasKoreanUnit = /[조억만천백십]/.test(compact);
+  if (!hasKoreanUnit && !hasWonMark) {
+    if (!/^\d+(?:\.\d+)?$/.test(compact)) return null;
+    const fallback = fromUnit === 'auto' ? 1 : Number(fromUnit);
+    const won = sign * Number(compact) * fallback;
+    return Number.isFinite(won) && Math.abs(won) <= Number.MAX_SAFE_INTEGER ? won : null;
+  }
+
+  let total = 0;
+  let cursor = 0;
+  let previousMajorScale = Infinity;
+  const majorPattern = /([^조억만]+)(조|억|만)/g;
+  let match;
+
+  while ((match = majorPattern.exec(compact)) !== null) {
+    if (match.index !== cursor) return null;
+    const scale = { 조: 1e12, 억: 1e8, 만: 1e4 }[match[2]];
+    if (scale >= previousMajorScale) return null;
+    const groupValue = parseKoreanDigitGroup(match[1]);
+    if (groupValue === null) return null;
+    total += groupValue * scale;
+    previousMajorScale = scale;
+    cursor = majorPattern.lastIndex;
+  }
+
+  const remainder = compact.slice(cursor);
+  if (remainder) {
+    const remainderValue = parseKoreanDigitGroup(remainder);
+    if (remainderValue === null) return null;
+    total += remainderValue;
+  } else if (cursor === 0) {
+    return null;
+  }
+
+  const won = total * sign;
+  return Number.isFinite(won) && Math.abs(won) <= Number.MAX_SAFE_INTEGER ? won : null;
+}
+
 export function convertAmountUnit(value, fromUnit, toUnit, decimalsMode) {
-  const parsed = parseFlexibleNumber(value);
-  if (parsed === null) return { ok: false, value };
+  const won = parseAmountToWon(value, fromUnit);
+  if (won === null) return { ok: false, value };
 
-  const from = Number(fromUnit || 1), to = Number(toUnit || 1);
-  let converted = (parsed * from) / to;
+  const to = Number(toUnit || 1);
+  if (!Number.isFinite(to) || to <= 0) return { ok: false, value };
 
+  let converted = won / to;
   if (decimalsMode !== 'auto') {
     const digits = parseInt(decimalsMode, 10);
     converted = Number(converted.toFixed(isNaN(digits) ? 0 : digits));
