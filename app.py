@@ -239,8 +239,8 @@ def remove_company_prefix(value: object) -> str:
     if not text:
         return ""
     text = text.replace("㈜", "")
-    text = re.sub(r"^\s*(?:\(주\)|（주）|주식회사)\s*", "", text)
-    text = re.sub(r"\s*(?:\(주\)|（주）|주식회사)\s*$", "", text)
+    text = re.sub(r"^\s*(?:\(\s*[주유]\s*\)|（\s*[주유]\s*）|주식회사|유한회사|㈲)\s*", "", text)
+    text = re.sub(r"\s*(?:\(\s*[주유]\s*\)|（\s*[주유]\s*）|주식회사|유한회사|㈲)\s*$", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
