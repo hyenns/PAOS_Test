@@ -252,8 +252,9 @@
                   <div class="opt-label"><strong>금액 단위 변환</strong><span>원·만원·백만원 단위 일괄 변환</span></div>
                 </div>
                 <div class="opt-sub" id="sub-amount">
-                  <span class="sub-label">현재 데이터 단위</span>
+                  <span class="sub-label">현재 데이터 단위 (표기된 조·억·만·원 단위를 우선 인식)</span>
                   <select id="amount-from-unit" onclick="event.stopPropagation()">
+                    <option value="auto">혼합 단위 자동 인식 (단위 없는 숫자는 원)</option>
                     <option value="1">원</option>
                     <option value="1000">천원</option>
                     <option value="10000">만원</option>
