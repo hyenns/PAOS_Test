@@ -64,38 +64,22 @@ def read_search_values(
         else:
             column_number = column_index + 1
 
-        if column_number < 1 or column_number > max(ws.max_column or 1, column_number):
+        if column_number < 1 or (ws.max_column is not None and column_number > ws.max_column):
             raise ValueError("선택한 열 번호가 엑셀 범위를 벗어났습니다.")
 
-        # 등록번호검색에서는 제목으로 지정했더라도 선택 열의 첫 셀이 실제 13자리
-        # 법인등록번호이면 데이터 파일로 판단해 첫 행도 포함합니다.
-        # 예: 별도 헤더 없이 A1부터 1101110003428 형태로 입력된 테스트/업무 파일.
-        first_cell_value = ws.cell(row=1, column=column_number).value
-        first_cell_digits = re.sub(r"\D", "", str(first_cell_value or ""))
-        first_row_is_registration_data = (
-            search_mode == "registration" and len(first_cell_digits) == 13
-        )
-
-        if header_mode == "header" and not first_row_is_registration_data:
-            start_row = 2
-        else:
-            start_row = 1
-
+        # read_only 시트의 cell()은 호출할 때마다 XML을 처음부터 다시 읽을 수 있습니다.
+        # 선택 열만 iter_rows()로 한 번 순차 읽어 대량 파일에서도 빠르게 준비합니다.
         values: list[str] = []
-
-        for row_number in range(start_row, (ws.max_row or 0) + 1):
-            # 완전히 빈 행은 건너뜁니다.
-            row_values = [
-                ws.cell(row=row_number, column=col).value
-                for col in range(1, (ws.max_column or column_number) + 1)
-            ]
-            if all(value is None or str(value).strip() == "" for value in row_values):
-                continue
-
-            value = ws.cell(row=row_number, column=column_number).value
+        for row_number, (value,) in enumerate(
+            ws.iter_rows(min_row=1, min_col=column_number, max_col=column_number, values_only=True),
+            start=1,
+        ):
+            if row_number == 1 and header_mode == "header":
+                first_cell_digits = re.sub(r"\D", "", str(value or ""))
+                if not (search_mode == "registration" and len(first_cell_digits) == 13):
+                    continue
             if value is None:
                 continue
-
             cleaned = str(value).strip()
             if not cleaned or cleaned.lower() == "nan":
                 continue
@@ -537,6 +521,7 @@ def api_iros_run():
             header_mode,
             column_index,
             column_letter,
+            search_mode=search_mode,
         )
     except Exception as e:
         return jsonify({"ok": False, "message": f"엑셀 파일을 읽을 수 없습니다: {str(e)}"}), 400
@@ -564,6 +549,7 @@ def api_iros_run():
 
     @stream_with_context
     def generate():
+        yield ndjson({"type": "log", "message": f"✅ 엑셀 검색값 {len(search_values):,}건 읽기 완료 · 중간저장 준비 중..."})
         events = run_iros_crawler_events(
             search_values,
             search_mode=search_mode,
@@ -702,6 +688,7 @@ def api_saramin_run():
 
     @stream_with_context
     def generate():
+        yield ndjson({"type": "log", "message": f"✅ 엑셀 검색값 {len(search_values):,}건 읽기 완료 · 중간저장 준비 중..."})
         events = run_saramin_crawler_events(
             search_values,
             max_results_per_keyword=max_results_per_keyword,
