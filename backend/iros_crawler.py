@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Iterable, Iterator, Any
 
 from selenium import webdriver
@@ -694,6 +695,28 @@ def set_iros_option(driver: webdriver.Chrome, wait: WebDriverWait, checkbox_id: 
         time.sleep(0.3)
 
 
+def _company_search_input_visible(driver: webdriver.Chrome):
+    """현재 탭의 실제 상호검색 입력창만 확인합니다."""
+    for element in driver.find_elements(By.ID, "mf_wfm_potal_main_wfm_content_sbx_conm_name_swrd___input"):
+        try:
+            if element.is_displayed() and element.is_enabled():
+                return element
+        except Exception:
+            continue
+    return False
+
+
+def _company_search_link_visible(driver: webdriver.Chrome):
+    xpath = "//a[contains(normalize-space(.), '상호검색')] | //button[normalize-space(.)='상호검색']"
+    for element in driver.find_elements(By.XPATH, xpath):
+        try:
+            if element.is_displayed() and element.is_enabled():
+                return element
+        except Exception:
+            continue
+    return False
+
+
 def enter_iros_business_search(
     driver: webdriver.Chrome,
     wait: WebDriverWait,
@@ -701,46 +724,67 @@ def enter_iros_business_search(
     include_closed_records: bool = False,
     include_erased_names: bool = False,
 ) -> None:
-    """기존 Streamlit/bat에서 정상 동작하던 방식과 동일한 상호검색 진입 로직."""
-    driver.get(IROS_URL)
+    """열려 있는 상호검색 화면은 재사용하고, 없을 때만 메뉴로 이동합니다."""
+    hostname = (urlsplit(driver.current_url or "").hostname or "").lower()
+    official = hostname == "iros.go.kr" or hostname.endswith(".iros.go.kr")
+    if not official:
+        try:
+            driver.get(IROS_URL)
+        except TimeoutException as exc:
+            raise TimeoutException("인터넷등기소 메인 화면 로딩 시간 초과") from exc
     ensure_iros_logged_in(driver)
 
-    menu_element = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), '등기지원 서비스')]"))
-    )
-    ActionChains(driver).move_to_element(menu_element).perform()
-    driver.execute_script("arguments[0].click();", menu_element)
-    time.sleep(2)
+    if not _company_search_input_visible(driver):
+        link = _company_search_link_visible(driver)
+        if not link:
+            try:
+                menu = _wait_top_navigation_text(driver, "등기지원 서비스", timeout=8)
+            except TimeoutException:
+                # 다른 등기소 화면에서 메뉴가 없을 경우에만 메인으로 이동합니다.
+                try:
+                    driver.get(IROS_URL)
+                    ensure_iros_logged_in(driver)
+                    menu = _wait_top_navigation_text(driver, "등기지원 서비스", timeout=8)
+                except TimeoutException as exc:
+                    raise TimeoutException("상단 '등기지원 서비스' 메뉴를 찾지 못했습니다.") from exc
+            _hover_element(driver, menu)
+            try:
+                link = WebDriverWait(driver, 3).until(_company_search_link_visible)
+            except TimeoutException:
+                # hover로 메뉴가 펼쳐지지 않은 경우에만 클릭합니다.
+                _click_element(driver, menu)
+                try:
+                    link = WebDriverWait(driver, 5).until(_company_search_link_visible)
+                except TimeoutException as exc:
+                    ensure_iros_logged_in(driver)
+                    raise TimeoutException("'상호검색' 메뉴 항목을 찾지 못했습니다.") from exc
+        _click_element(driver, link)
+        try:
+            wait.until(_company_search_input_visible)
+        except TimeoutException as exc:
+            ensure_iros_logged_in(driver)
+            raise TimeoutException("상호검색 메뉴 클릭 후 검색 입력창이 나타나지 않았습니다.") from exc
 
-    business_search = wait.until(
-        EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), '상호검색')]"))
-    )
-    driver.execute_script("arguments[0].click();", business_search)
-    time.sleep(2)
     ensure_iros_logged_in(driver)
-
-    Select(
-        wait.until(
-            EC.presence_of_element_located(
-                (By.ID, "mf_wfm_potal_main_wfm_content_sel_conm_name_juris_regt")
+    try:
+        Select(
+            wait.until(
+                EC.visibility_of_element_located(
+                    (By.ID, "mf_wfm_potal_main_wfm_content_sel_conm_name_juris_regt")
+                )
             )
-        )
-    ).select_by_visible_text("전체등기소")
+        ).select_by_visible_text("전체등기소")
+    except TimeoutException as exc:
+        raise TimeoutException("상호검색 화면의 관할등기소 선택란을 찾지 못했습니다.") from exc
 
-    # 검색 옵션: 사용자가 선택한 경우에만 체크합니다.
-    set_iros_option(
-        driver,
-        wait,
-        "mf_wfm_potal_main_wfm_content_cbx_conm_name_close_rgs_rec_incld_yn_input_0",
-        include_closed_records,
-    )
-    set_iros_option(
-        driver,
-        wait,
-        "mf_wfm_potal_main_wfm_content_cbx_conm_name_eras_conm_incld_yn_input_0",
-        include_erased_names,
-    )
-
+    for checkbox_id, enabled, label in [
+        ("mf_wfm_potal_main_wfm_content_cbx_conm_name_close_rgs_rec_incld_yn_input_0", include_closed_records, "폐쇄등기기록 포함"),
+        ("mf_wfm_potal_main_wfm_content_cbx_conm_name_eras_conm_incld_yn_input_0", include_erased_names, "주말된 상호 포함"),
+    ]:
+        try:
+            set_iros_option(driver, wait, checkbox_id, enabled)
+        except TimeoutException as exc:
+            raise TimeoutException(f"상호검색 옵션 '{label}'을 찾지 못했습니다.") from exc
 
 
 def _visible_exact_text_elements(driver: webdriver.Chrome, text: str):
@@ -1477,18 +1521,15 @@ def run_iros_crawler_events(
             enter_iros_registration_search(driver, wait)
             yield log("✅ 인터넷등기소 등록번호검색 화면 진입 완료")
         else:
+            yield log("🔎 현재 등기소 화면 및 상호검색 입력창 확인 중...")
             enter_iros_business_search(
                 driver,
                 wait,
                 include_closed_records=include_closed_records,
                 include_erased_names=include_erased_names,
             )
+            search_box = wait.until(_company_search_input_visible)
             yield log("✅ 인터넷등기소 상호검색 화면 진입 완료")
-            search_box = wait.until(
-                EC.presence_of_element_located(
-                    (By.ID, "mf_wfm_potal_main_wfm_content_sbx_conm_name_swrd___input")
-                )
-            )
 
         for idx, company in enumerate(company_inputs):
             current_no = idx + 1
@@ -1666,14 +1707,19 @@ def run_iros_crawler_events(
             message=str(e),
             logs=logs.copy(),
         )
-    except TimeoutException:
+    except TimeoutException as exc:
+        detail = str(getattr(exc, "msg", "") or "등기소 화면 또는 입력창 응답 시간 초과").strip()[:240]
+        if search_mode == "company":
+            guidance = (
+                "로그인한 등기소 Chrome 창에서 '등기지원 서비스 → 상호검색' 화면을 직접 열어 둔 뒤 "
+                "WorkLab에서 크롤링을 다시 시작해 주세요. 로그인이 풀렸다면 먼저 다시 로그인해 주세요."
+            )
+        else:
+            guidance = "로그인된 Chrome 창에서 등록번호검색 화면 및 로그인 상태를 확인해 주세요."
         yield make_event(
             "error",
             code="IROS_SCREEN_TIMEOUT",
-            message=(
-                "등기소 화면 전환을 확인하지 못했습니다. 로그인된 Chrome 창을 확인해 주세요. "
-                "로그인이 풀렸거나 인터넷등기소 화면 구조가 변경된 경우 '등기소 로그인'에서 다시 로그인한 뒤 재시도해 주세요."
-            ),
+            message=f"등기소 화면 전환 실패: {detail}\n{guidance}",
             logs=logs.copy(),
         )
     except Exception as e:
