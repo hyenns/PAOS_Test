@@ -3,6 +3,9 @@
 
 let workbook = null;
 let selectedFile = null;
+import { createCrawlCheckpointUI } from './crawl-checkpoint.js';
+
+const checkpointUI = createCrawlCheckpointUI('iros');
 let resultExcelBase64 = null;
 let resultFilename = '등기소_크롤링_결과.xlsx';
 
@@ -324,7 +327,9 @@ async function readIrosStream(response) {
 
       const event = JSON.parse(trimmed);
 
-      if (event.type === 'log') {
+      if (event.type === 'checkpoint_start' || event.type === 'checkpoint_status') {
+        checkpointUI.handleEvent(event);
+      } else if (event.type === 'log') {
         appendIrosLog(event.message || '');
       } else if (event.type === 'progress') {
         updateIrosProgress(event.current, event.total, event.result_count);
@@ -338,6 +343,7 @@ async function readIrosStream(response) {
 
   if (buffer.trim()) {
     const event = JSON.parse(buffer.trim());
+    if (event.type === 'checkpoint_start' || event.type === 'checkpoint_status') checkpointUI.handleEvent(event);
     if (event.type === 'complete') finalData = event;
     if (event.type === 'error') throw new Error(event.message || '크롤링 실행 중 오류가 발생했습니다.');
   }
@@ -418,6 +424,7 @@ async function runIrosCrawler() {
   formData.append('headless', 'true');
 
   resultExcelBase64 = null;
+  checkpointUI.prepare();
   $('#btn-run-iros').prop('disabled', true).text('⏳ 크롤링 중...');
   $('#iros-result-box').show();
   $('#irosResultTable').empty();
@@ -499,8 +506,8 @@ async function runIrosCrawler() {
 
 function downloadIrosResult() {
   if (!resultExcelBase64) {
-    alert('다운로드할 결과가 없습니다. 먼저 크롤링을 실행해 주세요.');
-    return;
+    // Even when the original stream is stuck, a separate endpoint exports committed rows.
+    return checkpointUI.downloadCurrent();
   }
 
   const byteChars = atob(resultExcelBase64);
@@ -518,6 +525,7 @@ function downloadIrosResult() {
 }
 
 export function showIrosPanel() {
+  checkpointUI.refreshHistory();
   $('#saramin-panel').hide();
   $('#iros-panel').show();
   document.getElementById('iros-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -526,6 +534,7 @@ export function showIrosPanel() {
 }
 
 export function initIrosCrawler() {
+  checkpointUI.init();
   $('#irosFileInput').on('change', async function () {
     const file = this.files?.[0];
     if (file) await handleFile(file);

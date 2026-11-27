@@ -509,6 +509,19 @@
 
             <div class="crawler-alert" id="iros-server-status">서버 상태 확인 중...</div>
 
+            <div class="crawler-option-box" id="iros-checkpoint-box">
+              <div class="crawler-option-title">💾 중간결과 자동 저장</div>
+              <div class="crawler-mode-help" style="margin-bottom: 10px; line-height: 1.7">수집되는 결과는 자동으로 PC에 저장됩니다. 크롤링 도중이나 WorkLab을 다시 실행한 뒤에도 같은 브라우저에서 최근 작업의 중간결과를 다운로드할 수 있습니다.</div>
+              <div class="crawler-field">
+                <label for="iros-checkpoint-history">저장된 작업 선택</label>
+                <select id="iros-checkpoint-history" disabled><option value="">아직 저장된 작업이 없습니다.</option></select>
+              </div>
+              <div class="action-row" style="margin-top: 10px">
+                <button type="button" class="btn-accent-outline" id="btn-iros-checkpoint-download" disabled>⬇️ 중간결과 다운로드 (.xlsx)</button>
+              </div>
+              <div class="crawler-mode-help" id="iros-checkpoint-status" style="margin-top: 8px">크롤링 시작 시 자동 저장됩니다.</div>
+            </div>
+
             <div class="crawler-option-box" id="iros-login-box">
               <div class="crawler-option-title">인터넷등기소 로그인</div>
               <p style="line-height: 1.7; margin-bottom: 12px">
@@ -633,6 +646,19 @@
             </div>
 
             <div class="crawler-alert" id="saramin-server-status">서버 상태 확인 중...</div>
+
+            <div class="crawler-option-box" id="saramin-checkpoint-box">
+              <div class="crawler-option-title">💾 중간결과 자동 저장</div>
+              <div class="crawler-mode-help" style="margin-bottom: 10px; line-height: 1.7">수집되는 결과는 자동으로 PC에 저장됩니다. 크롤링 도중이나 WorkLab을 다시 실행한 뒤에도 같은 브라우저에서 최근 작업의 중간결과를 다운로드할 수 있습니다.</div>
+              <div class="crawler-field">
+                <label for="saramin-checkpoint-history">저장된 작업 선택</label>
+                <select id="saramin-checkpoint-history" disabled><option value="">아직 저장된 작업이 없습니다.</option></select>
+              </div>
+              <div class="action-row" style="margin-top: 10px">
+                <button type="button" class="btn-accent-outline" id="btn-saramin-checkpoint-download" disabled>⬇️ 중간결과 다운로드 (.xlsx)</button>
+              </div>
+              <div class="crawler-mode-help" id="saramin-checkpoint-status" style="margin-top: 8px">크롤링 시작 시 자동 저장됩니다.</div>
+            </div>
 
             <label class="upload-zone" for="saraminFileInput" id="saraminUploadZone">
               <div class="up-icon">📂</div>

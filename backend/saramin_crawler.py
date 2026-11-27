@@ -545,6 +545,7 @@ def run_saramin_crawler_events(
 
                         results.append(row)
                         count += 1
+                        yield make_event("checkpoint_rows", rows=[row], offset=len(results) - 1)
                     except Exception as e:
                         yield log(f"  ↳ {corp.get('corp_name', '기업명 없음')} — 상세 수집 실패: {str(e)[:60]}")
                         continue

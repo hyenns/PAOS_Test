@@ -1541,6 +1541,7 @@ def run_iros_crawler_events(
 
                     merge_columns(per_columns)
                     results.extend(per_rows)
+                    yield make_event("checkpoint_rows", rows=per_rows, offset=len(results) - len(per_rows), columns=result_columns.copy())
                     yield log(f"✅ [{current_no}/{total}] {company} — {len(per_rows)}건")
                     yield make_event("progress", current=current_no, total=total, result_count=len(results))
                     continue
@@ -1616,6 +1617,7 @@ def run_iros_crawler_events(
                             }
                         )
                         count += 1
+                        yield make_event("checkpoint_rows", rows=[results[-1]], offset=len(results) - 1, columns=result_columns.copy())
                     except Exception:
                         continue
 

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
+from flask import Flask, Response, jsonify, request, send_from_directory, send_file, stream_with_context
 
 from backend.iros_crawler import (
     IROS_RESULT_COLUMNS,
@@ -18,6 +18,8 @@ from backend.iros_crawler import (
     get_iros_login_status,
 )
 from backend.saramin_crawler import SARAMIN_RESULT_COLUMNS, get_saramin_result_columns, run_saramin_crawler_events
+
+from backend.crawl_checkpoint import tracked_crawl, read_checkpoint
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -420,6 +422,8 @@ def dataframe_to_excel_base64(
     *,
     clean_rows: list[dict] | None = None,
     clean_columns: list[str] | None = None,
+    progress_info: list[dict] | None = None,
+    remaining_inputs: list[str] | None = None,
 ) -> str:
     df = pd.DataFrame(rows, columns=columns) if columns else pd.DataFrame(rows)
     output = io.BytesIO()
@@ -431,6 +435,14 @@ def dataframe_to_excel_base64(
             clean_df = pd.DataFrame(clean_rows, columns=clean_columns) if clean_columns else pd.DataFrame(clean_rows)
             clean_df.to_excel(writer, index=False, sheet_name="정제결과")
             apply_result_excel_style(writer.sheets["정제결과"])
+
+        if progress_info is not None:
+            pd.DataFrame(progress_info, columns=["항목", "내용"]).to_excel(writer, index=False, sheet_name="진행정보")
+            apply_result_excel_style(writer.sheets["진행정보"])
+            writer.sheets["진행정보"].column_dimensions["B"].width = 75
+        if remaining_inputs is not None:
+            pd.DataFrame({"검색값": remaining_inputs}).to_excel(writer, index=False, sheet_name="남은 검색값")
+            apply_result_excel_style(writer.sheets["남은 검색값"])
 
     output.seek(0)
     return base64.b64encode(output.read()).decode("utf-8")
@@ -552,12 +564,17 @@ def api_iros_run():
 
     @stream_with_context
     def generate():
-        for event in run_iros_crawler_events(
+        events = run_iros_crawler_events(
             search_values,
             search_mode=search_mode,
             include_closed_records=include_closed_records,
             include_erased_names=include_erased_names,
             headless=headless,
+        )
+        for event in tracked_crawl(
+            events, kind="iros", inputs=search_values,
+            columns=["검색값"] if search_mode == "registration" else IROS_RESULT_COLUMNS,
+            options=iros_clean_options, clean_sheet=clean_iros_enabled, mode=search_mode,
         ):
             if event.get("type") == "complete":
                 results = event.get("results", [])
@@ -685,11 +702,16 @@ def api_saramin_run():
 
     @stream_with_context
     def generate():
-        for event in run_saramin_crawler_events(
+        events = run_saramin_crawler_events(
             search_values,
             max_results_per_keyword=max_results_per_keyword,
             collect_finance=collect_finance,
             headless=headless,
+        )
+        for event in tracked_crawl(
+            events, kind="saramin", inputs=search_values, columns=result_columns,
+            options=saramin_clean_options, clean_sheet=clean_saramin_enabled,
+            mode="finance" if collect_finance else "intro",
         ):
             if event.get("type") == "complete":
                 results = event.get("results", [])
@@ -746,6 +768,51 @@ def api_saramin_run():
             "X-Accel-Buffering": "no",
         },
     )
+
+@app.route("/api/crawl/checkpoint/<job_id>", methods=["GET"])
+def api_crawl_checkpoint(job_id: str):
+    """Download a consistent saved snapshot independently of the running crawl."""
+    try:
+        meta, rows, remaining = read_checkpoint(job_id)
+        columns = meta["columns"]
+        options = meta["options"]
+        output_rows, output_columns = rows, columns
+        clean_rows, clean_columns = None, None
+        if any(options.values()):
+            if meta["kind"] == "iros":
+                clean_rows, clean_columns = build_iros_clean_rows(rows, options, columns)
+            else:
+                clean_rows, clean_columns = build_saramin_clean_rows(rows, columns, options)
+            if not meta["clean_sheet"]:
+                output_rows, output_columns = clean_rows, clean_columns
+                clean_rows, clean_columns = None, None
+        states = {"running": "마지막 기록: 수집 중 (현재 실행 여부와 별개)", "complete": "수집 완료", "error": "오류 종료", "interrupted": "중단"}
+        mode_labels = {"company": "상호검색", "registration": "등록번호검색", "intro": "기업소개만", "finance": "기업소개 + 재무정보"}
+        progress = [
+            {"항목": "검색 방식", "내용": mode_labels.get(meta["mode"], meta["mode"])},
+            {"항목": "상태", "내용": states.get(meta["state"], meta["state"])},
+            {"항목": "전체 검색 대상", "내용": meta["total"]},
+            {"항목": "처리한 검색값 (실패 포함)", "내용": meta["processed"]},
+            {"항목": "저장된 결과 행", "내용": len(rows)},
+            {"항목": "남은 검색값", "내용": len(remaining)},
+            {"항목": "마지막 저장 시간", "내용": meta["updated_at"]},
+            {"항목": "재수집 안내", "내용": "남은 검색값 시트로 재수집할 수 있습니다. 진행 중이던 검색값은 일부 저장되었을 수 있으므로 결과 병합 시 중복을 확인하세요."},
+        ]
+        encoded = dataframe_to_excel_base64(
+            output_rows, columns=output_columns, clean_rows=clean_rows,
+            clean_columns=clean_columns, progress_info=progress, remaining_inputs=remaining,
+        )
+        label = "등기소" if meta["kind"] == "iros" else "사람인"
+        filename = f"{label}_중간결과_{meta['processed']}of{meta['total']}_{len(rows)}건_{job_id[:8]}.xlsx"
+        response = send_file(io.BytesIO(base64.b64decode(encoded)), as_attachment=True,
+                             download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", max_age=0)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except FileNotFoundError:
+        return jsonify({"ok": False, "message": "저장된 중간결과 파일을 찾을 수 없습니다. 서버 PC 또는 저장 위치를 확인해 주세요."}), 404
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"중간결과 다운로드 실패: {str(exc)[:200]}"}), 500
+
 
 if __name__ == "__main__":
     host = os.environ.get("WORKLAB_HOST", "0.0.0.0")
